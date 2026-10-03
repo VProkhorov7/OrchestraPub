@@ -283,6 +283,11 @@ export async function serve(opts: ServeOptions = {}) {
       }
       case 'POST /doctor/discover':
         return json(res, 200, discoverProjects((await body(req)).roots ?? []));
+      case 'GET /alerts':
+        return json(res, 200, hub.alerts.list());
+      case 'POST /alerts/clear':
+        hub.alerts.clearAll();
+        return json(res, 200, { ok: true });
       case 'GET /tariff':
         return json(res, 200, hub.tariff());
       case 'GET /scheduled':

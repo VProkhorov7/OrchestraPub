@@ -33,6 +33,8 @@ you ── task ──▶ orchestrator (Claude / ChatGPT, on a subscription or a
 | **Worker roles** | Features, bugfixes, tests, refactoring, docs, review. Each worker is allowed its own roles. |
 | **Budgets and caps** | A limit per run and per worker, with spend counted from real tokens and the provider's prices. Providers without published prices get a live estimate, so the cap still works. On subscriptions you see what the work would have cost at API prices. |
 | **Off-peak scheduling** | Workers with time-of-day pricing (DeepSeek: half price outside peak hours, Chinese public holidays included) run together in the cheap window. In peak hours a task goes to a worker without such a tariff, or waits. A run can also be scheduled into the next cheap window. |
+| **Watchdogs and alerts** | The service reports a silent worker, a lost worktree, a run near its budget, a failed task and a connection that went down: a bell in the panel, a macOS notification, an optional webhook. An external watchdog restarts the service if it stops answering. |
+| **Automatic retry** | A failed task is restarted on another suitable worker up to three times; if that does not help, the orchestrator asks you what to do, with the history and the options. |
 | **History** | Every run is saved. You can resume an interrupted run where it stopped, and merge or discard the branches of a saved run later. |
 | **Service `orchestra serve`** | Web panel, MCP over HTTP for any AI client, and a JSON API. One service on a home server can be reached from a laptop over Tailscale. |
 | **MCP** | Claude Code, Codex, Cursor and agents in Orca can direct Orchestra's workers themselves, or hand a whole task to the autopilot. |

@@ -59,6 +59,8 @@
     doctorProjects: (projects, roots) => post('/api/doctor/projects', { projects, roots }),
     doctorDiscover: (roots) => post('/api/doctor/discover', { roots }),
     tariff: () => get('/api/tariff'),
+    listAlerts: () => get('/api/alerts'),
+    clearAlerts: () => post('/api/alerts/clear'),
     scheduledList: () => get('/api/scheduled'),
     schedule: (repo, goal, plan, choice) => post('/api/schedule', { repo, goal, plan, choice }),
     unschedule: (id) => call('DELETE', `/api/scheduled/${enc(id)}`),

@@ -540,3 +540,20 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 16
   .brand { min-width: 0; }
   .runChip, .tariffChip, .forceChip { display: none; }
 }
+
+/* ---------- оповещения ---------- */
+#alertBtn { position: relative; }
+#alertBtn svg { width: 18px; height: 18px; }
+#alertCount { margin-left: 2px; }
+.alertPanel { position: fixed; top: 60px; right: 16px; width: min(440px, calc(100vw - 32px)); max-height: 70vh; display: flex; flex-direction: column; background: var(--s1); border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--shadow); z-index: 30; }
+.alertPanel[hidden] { display: none; }
+.alertHead { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.alertList { overflow: auto; padding: 6px 0; }
+.alertItem { padding: 8px 14px; border-left: 3px solid var(--line-2); }
+.alertItem.error { border-left-color: var(--err); }
+.alertItem.warn { border-left-color: var(--warn); }
+.alertItem.info { border-left-color: var(--ok); opacity: .8; }
+.alertItem.fresh { background: var(--accent-soft); }
+.alertTitle { font-weight: 600; font-size: 13px; display: flex; gap: 8px; align-items: baseline; }
+.alertTime { margin-left: auto; font-size: 11px; color: var(--muted); font-weight: 400; white-space: nowrap; }
+.alertText { font-size: 12px; color: var(--text-2); margin-top: 2px; overflow-wrap: anywhere; white-space: pre-line; }

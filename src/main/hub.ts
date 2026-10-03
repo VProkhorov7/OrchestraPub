@@ -41,6 +41,8 @@ export function parseReport(report: string): { summary: string; done: string[]; 
 }
 import * as git from './git';
 import { pick } from '../memory/lang';
+import { Alerts } from './alerts';
+import { Watchdog } from './watchdog';
 import { AppConfig, Health, OrchEvent, Plan, PlannerChoice, ROLES, RunState, Triage } from './types';
 
 type Controller = Orchestrator | CliOrchestrator;
@@ -93,6 +95,8 @@ export class Hub {
   /** Last run started or resumed from a UI: what the desktop app shows by default. */
   currentId: string | null = null;
   private idleTimer: NodeJS.Timeout;
+  readonly alerts: Alerts;
+  private watchdog: Watchdog;
 
   constructor(
     public home: string,
@@ -102,6 +106,14 @@ export class Hub {
     this.runs = new RunStore(path.join(home, 'runs'));
     this.idleTimer = setInterval(() => this.closeIdleMcp(), 60_000);
     this.idleTimer.unref();
+    this.alerts = new Alerts(path.join(home, 'alerts.json'), () => this.config(), (alert) => this.emitOut({ type: 'alert', alert }));
+    this.watchdog = new Watchdog(this, this.alerts, () => this.config());
+  }
+
+  /** Engines of runs that are going now (app runs and MCP sessions): what the watchdog looks at. */
+  liveEngines() {
+    const apps = [...this.controllers.values()].filter((c) => c.state.status === 'running').map((c) => c.engine);
+    return [...apps, ...[...this.mcp.values()].map((m) => m.engine)];
   }
 
   get worktreeRoot() {
@@ -112,6 +124,7 @@ export class Hub {
   private scheduleTimer?: NodeJS.Timeout;
 
   init() {
+    this.watchdog.start();
     this.scheduleTimer = setInterval(() => this.tickSchedule().catch(() => {}), 60_000);
     this.scheduleTimer.unref();
     setTimeout(() => this.tickSchedule().catch(() => {}), 3_000).unref();
@@ -143,6 +156,11 @@ export class Hub {
   }
 
   emit(ev: HubEvent) {
+    try {
+      this.watchdog.onEvent(ev);
+    } catch {
+      /* a watchdog fault never blocks events */
+    }
     this.emitOut(ev);
   }
 
@@ -711,6 +729,7 @@ export class Hub {
   }
 
   stop() {
+    this.watchdog.stop();
     clearInterval(this.idleTimer);
     this.freezeAll();
   }

@@ -26,6 +26,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   orchestratorPreamble: '',
   runBudgetUsd: 20,
   language: 'ru',
+  autoRetry: 3,
+  notify: { macos: true, macosLevel: 'error', silentMinutes: 8 },
   plannerPick: 'ask',
   serve: { host: '127.0.0.1', port: 7777 },
 };

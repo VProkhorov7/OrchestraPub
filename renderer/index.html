@@ -26,6 +26,10 @@
       <div id="tariffChip" class="tariffChip" hidden title="Тариф исполнителей с почасовой ценой"><span class="dot"></span><span id="tariffText"></span></div>
       <div class="topRight">
         <button id="modeChip" class="modeChip off" title="Режим работы Orca и Orchestra — открыть диагностику"><span class="dot"></span><span id="modeChipText">Режим…</span><span id="modeChipIssues" class="pill warn" hidden></span></button>
+        <button id="alertBtn" class="iconBtn" title="Оповещения: что не сработало или требует внимания" aria-label="Оповещения">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 17h12l-1.5-2V10a4.5 4.5 0 0 0-9 0v5L6 17Zm4 2.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="alertCount" class="pill err" hidden>0</span>
+        </button>
         <button id="langBtn" class="iconBtn" title="Язык интерфейса">RU</button>
         <button id="themeBtn" class="iconBtn" title="Тема">◐</button>
         <button id="openSettings" class="iconBtn" title="Настройки, подключения и роли воркеров">
@@ -198,6 +202,11 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <div id="alertPanel" class="alertPanel" hidden>
+    <div class="alertHead"><b>Оповещения</b><button id="alertClear" class="link">Очистить</button></div>
+    <div id="alertList" class="alertList"></div>
   </div>
 
   <dialog id="projDlg">
@@ -375,5 +384,6 @@
   <script src="bigfield.js"></script>
   <script src="renderer.js"></script>
   <script src="overview.js"></script>
+  <script src="alerts.js"></script>
 </body>
 </html>

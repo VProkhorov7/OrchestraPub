@@ -48,6 +48,19 @@ export interface ProviderConfig {
 export type OrchestratorMode = 'api' | 'claude-sub' | 'codex-sub';
 
 export interface AppConfig {
+  /** How many times a failed task is restarted automatically (on another worker when there is one) before the owner is asked. 0 = never. */
+  autoRetry?: number;
+  /** Watchdogs and notifications: what is watched and where problems are reported (see alerts.ts, watchdog.ts). */
+  notify?: {
+    /** macOS notification centre. */
+    macos?: boolean;
+    /** Lowest level that raises a macOS notification. */
+    macosLevel?: 'warn' | 'error';
+    /** A worker that shows no activity for this many minutes is reported. */
+    silentMinutes?: number;
+    /** Optional URL that receives every alert as a plain-text POST (works with ntfy.sh and similar). */
+    webhook?: string;
+  };
   /** Interface and report language (the panel's RU/EN switch): models write plans and reports in it. Default ru. */
   language?: 'ru' | 'en';
   /** Who plans and reviews: Claude via API key, or Claude Code / Codex on a subscription (through MCP). */
@@ -178,6 +191,14 @@ export type TaskStatus =
 
 export interface WorkerTask {
   id: string;
+  /** Automatic retries: the first task of a job is its jobId; every retry is a new task with attempt + 1. */
+  jobId?: string;
+  attempt?: number;
+  retryOf?: string;
+  retriedAs?: string;
+  /** All automatic retries failed: the owner has to decide. `question` is what they are asked. */
+  escalated?: boolean;
+  question?: string;
   title: string;
   providerId: string;
   model: string;
@@ -261,10 +282,22 @@ export interface TranscriptEntry {
   text: string;
 }
 
+export interface Alert {
+  id: string;
+  ts: number;
+  level: 'info' | 'warn' | 'error';
+  /** Same key = same problem: repeats inside the cool-down are not raised again. */
+  key: string;
+  title: string;
+  text: string;
+  runId?: string;
+}
+
 export type OrchEvent =
   | { type: 'state'; state: RunState }
   | { type: 'transcript'; entry: TranscriptEntry }
   | { type: 'task'; task: WorkerTask }
   | { type: 'task_log'; taskId: string; line: string }
   | { type: 'toast'; level: 'info' | 'error'; text: string }
-  | { type: 'health'; health: Record<string, Health> };
+  | { type: 'health'; health: Record<string, Health> }
+  | { type: 'alert'; alert: Alert };

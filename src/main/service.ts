@@ -12,6 +12,8 @@ import { run } from './git';
 
 export const LAUNCH_LABEL = 'dev.orchestra.serve';
 
+export const WATCH_LABEL = 'dev.orchestra.watch';
+
 export function launchAgentsDir() {
   return process.env.ORCHESTRA_LAUNCH_AGENTS || path.join(os.homedir(), 'Library', 'LaunchAgents');
 }
@@ -87,6 +89,52 @@ export function plistText(host: string, port: number, nodePath?: string): string
   <key>EnvironmentVariables</key><dict><key>PATH</key><string>${esc(process.env.PATH ?? '')}</string></dict>
 </dict></plist>
 `;
+}
+
+export function watchPlistPath() {
+  return path.join(launchAgentsDir(), `${WATCH_LABEL}.plist`);
+}
+
+/** The external watchdog: launchd runs `orchestra-ctl watch` every minute, independently of the service it watches. */
+export function watchPlistText(nodePath?: string): string {
+  const ctl = path.resolve(__dirname, '..', 'server', 'ctl.js');
+  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const log = path.join(orchestraHome(), 'logs', 'watch.log');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>${WATCH_LABEL}</string>
+  <key>ProgramArguments</key><array><string>${esc(nodePath ?? stableNodePath())}</string><string>${esc(ctl)}</string><string>watch</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>StartInterval</key><integer>60</integer>
+  <key>StandardOutPath</key><string>${esc(log)}</string>
+  <key>StandardErrorPath</key><string>${esc(log)}</string>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>${esc(process.env.PATH ?? '')}</string></dict>
+</dict></plist>
+`;
+}
+
+export function writeWatchPlist(): string {
+  const f = watchPlistPath();
+  fs.mkdirSync(path.join(orchestraHome(), 'logs'), { recursive: true });
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, watchPlistText());
+  return f;
+}
+
+export async function watchLoaded(): Promise<boolean> {
+  if (!hasLaunchd()) return false;
+  const r = await run(launchctl(), ['list', WATCH_LABEL], process.cwd(), { timeoutMs: 10_000 });
+  return r.code === 0;
+}
+
+export async function watchLoad(): Promise<void> {
+  const r = await run(launchctl(), ['load', '-w', watchPlistPath()], process.cwd(), { timeoutMs: 15_000 });
+  if (r.code !== 0) throw new Error(`launchctl load (watch): ${(r.stderr || r.stdout).trim()}`);
+}
+
+export async function watchUnload(): Promise<void> {
+  await run(launchctl(), ['unload', '-w', watchPlistPath()], process.cwd(), { timeoutMs: 15_000 });
 }
 
 /** Write the launchd agent that keeps `orchestra serve` running (does not load it). */

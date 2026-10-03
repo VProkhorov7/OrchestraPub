@@ -28,6 +28,7 @@ How work happens:
 - After a worker finishes, you get its summary and the diff. Read the diff critically: check it does what was asked, nothing more, no debug leftovers, no broken imports. Run the project's tests with run_command AFTER merging if a test command exists.
 - If a diff is wrong, either delegate a follow-up fix (a new task; mention the branch is based on ${baseBranch} so include full context again), or discard the task. Do not merge junk.
 - Use the cheapest worker that can plausibly do the job. Escalate to a stronger one only after a failure.
+- Failed or timed-out tasks are restarted by Orchestra itself, up to 3 times, on another suitable worker when there is one. A task shown as auto-retry→tNN has a successor: do not delegate it again, wait for tNN. A task marked NEEDS OWNER DECISION is out of retries: stop working on it and tell the owner, in the owner's language, what failed, what was tried and the options given, then wait for the answer.
 - Delegate several independent tasks in the same turn so they run in parallel (max ${cfg.maxParallel} at once; extra ones queue).
 - When the goal is achieved (or you conclude it can't be), call finish with a concise report: what was merged, what was discarded and why, what remains for a human.
 

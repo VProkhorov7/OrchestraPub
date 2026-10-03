@@ -195,6 +195,24 @@ codex mcp add orchestra -- node /path/to/Orchestra/dist/mcp/server.js
 | The web panel asks for a token | Run `node dist/server/serve.js --print-token` and open `/?token=…`. |
 | After a server reboot the service is not running | Check automatic user login and `launchctl list \| grep orchestra`, then read `serve.log`. |
 
+### Watchdogs, alerts and automatic retry
+
+**Watchdogs.** The service watches the work itself and tells you when something is wrong:
+- a worker has been silent for more than 8 minutes (the provider is stuck);
+- a running task has lost its working folder;
+- a run is close to its budget (80%) or has used it up, a worker is close to its spend cap (90%) or has reached it;
+- a task failed or timed out;
+- a connection turned red or yellow (and when it works again);
+- a run failed, was stopped by the budget or was interrupted.
+
+A separate watchdog, `orchestra-ctl watch`, is run by launchd once a minute, independently of the service. If the service fails to answer twice in a row, it restarts the service and tells you. It does not bring the service back after `Orchestra-stop.command`. It also warns when statistics collection has stopped.
+
+**Where alerts show up.** A bell in the panel header with a counter of unread alerts and a list; a pop-up message; a macOS notification (errors only by default); optionally a request to a `webhook` address (works with ntfy.sh). The list is kept in `alerts.json` next to the settings, so a problem that happened while you were away is not lost.
+
+**Automatic retry.** A task that failed or timed out is restarted on another suitable worker (the cheapest one not tried yet), up to three times. The run journal shows «Auto-retry 1/3», and the orchestrator does not delegate such a task again but waits for the new one. If three retries do not help, Orchestra stops the task and the orchestrator asks you a question: what happened, what was tried and what to do next (retry on a worker you name, rewrite the brief, do it yourself, put it off). Stops caused by a cap or a budget are not retried.
+
+Settings in `config.json`: `autoRetry` (the number of retries, 3 by default, 0 turns it off) and `notify`: `macos` (true/false), `macosLevel` (`warn` or `error`), `silentMinutes` (8 by default), `webhook` (an address or empty).
+
 ## 10. English mode: preparing the environment
 
 Orchestra's interface and the whole workflow can run in English. This section is in English on purpose: it is what you follow after switching.

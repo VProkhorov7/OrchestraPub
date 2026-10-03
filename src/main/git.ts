@@ -15,7 +15,11 @@ export function run(
       { cwd, timeout: opts.timeoutMs ?? 120_000, maxBuffer: 64 * 1024 * 1024, env: opts.env ?? process.env },
       (err, stdout, stderr) => {
         // A missing binary comes back as code 'ENOENT'; report it like a shell would (127).
-        if ((err as any)?.code === 'ENOENT') return resolve({ code: 127, stdout: '', stderr: `${cmd}: command not found`, timedOut: false });
+        if ((err as any)?.code === 'ENOENT') {
+          // spawn reports ENOENT for a missing working directory too: say which one it is.
+          if (!fs.existsSync(cwd)) return resolve({ code: 128, stdout: '', stderr: `working directory does not exist: ${cwd}`, timedOut: false });
+          return resolve({ code: 127, stdout: '', stderr: `${cmd}: command not found`, timedOut: false });
+        }
         // execFile only kills the child itself on timeout; a signal from outside leaves `killed` false.
         const timedOut = !!(err && (err as any).killed);
         const code = err && typeof (err as any).code === 'number' ? (err as any).code : err ? 1 : 0;

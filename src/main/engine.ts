@@ -8,6 +8,8 @@ import { workerCost, emptyUsage, Usage } from './pricing';
 import { offPeakNow, stretchEnd, priceFactor, now as tariffNow } from './tariff';
 import { canWork } from './catalog';
 import { ProjectMemory } from '../memory/store';
+import { pick } from '../memory/lang';
+import { replyLang } from './lang';
 import { memoryBriefing } from '../memory/prompt';
 
 export const MAX_DIFF_CHARS_FOR_LLM = 60_000;
@@ -134,7 +136,7 @@ export class TaskEngine {
     });
   }
 
-  delegate(input: { provider: string; role?: string; title: string; spec: string }): string {
+  delegate(input: { provider: string; role?: string; title: string; spec: string; retry?: { of: string; jobId: string; attempt: number } }): string {
     if (this.cancelled) throw new Error('run is cancelled');
     if (this.budgetExhausted || (this.budget() > 0 && this.budgetUsed() >= 1))
       throw new Error(`run budget exhausted (${this.spendReport()}). Do not delegate; merge or discard finished tasks and finish.`);
@@ -197,6 +199,9 @@ export class TaskEngine {
       worktree: path.join(this.worktreeRoot, this.state.runId, id),
       baseSha: '',
       createdAt: Date.now(),
+      jobId: input.retry?.jobId ?? id,
+      attempt: input.retry?.attempt ?? 1,
+      retryOf: input.retry?.of,
       log: [],
     };
     this.state.tasks.push(task);
@@ -313,6 +318,7 @@ export class TaskEngine {
       const r = await handle.promise;
       this.handles.delete(task.id);
       if (this.frozen) return; // quitting: leave the task "running" for reconcileInterrupted()
+      if (task.status === 'discarded') return; // thrown away while it was still working: its folder and branch are gone
 
       task.result = r.result;
       charge(r.usage, r.reportedCostUsd);
@@ -331,10 +337,13 @@ export class TaskEngine {
         costUsd: task.costUsd,
       }, `orchestra:${task.providerId}`);
       this.checkBudgets();
+      this.afterFailure(task);
     } catch (e: any) {
+      if (task.status === 'discarded') return;
       task.error = e?.message ?? String(e);
       task.finishedAt = Date.now();
       this.setStatus(task, 'failed');
+      this.afterFailure(task);
     } finally {
       this.release(task);
     }
@@ -344,6 +353,66 @@ export class TaskEngine {
     const waiters = this.taskWaiters.get(task.id) ?? [];
     this.taskWaiters.delete(task.id);
     waiters.forEach((w) => w());
+  }
+
+  // ---------- automatic retry and escalation ----------
+
+  private capReached(p: ProviderConfig): boolean {
+    const cap = p.maxUsdPerRun ?? 0;
+    return cap > 0 && (this.spent().byProvider[p.id] ?? 0) >= cap;
+  }
+
+  /** The worker for a retry: one this job has not tried yet, the cheapest first; when all were tried, the cheapest again. */
+  private retryProvider(task: WorkerTask): ProviderConfig | null {
+    const forced = this.cfg.forceProvider;
+    if (forced) return this.cfg.providers.find((p) => p.id === forced && p.enabled && canWork(p)) ?? null;
+    const tried = new Set(this.state.tasks.filter((x) => x.jobId === task.jobId).map((x) => x.providerId));
+    const pool = (task.role ? this.providersFor(task.role) : this.cfg.providers.filter((x) => x.enabled && canWork(x))).filter((p) => !this.capReached(p));
+    const fresh = pool.filter((p) => !tried.has(p.id));
+    const list = fresh.length ? fresh : pool;
+    const price = (p: ProviderConfig) => (p.billing !== 'api' ? 0 : p.priceOut ?? Infinity);
+    return [...list].sort((a, b) => price(a) - price(b))[0] ?? null;
+  }
+
+  /** What the owner is asked when automatic retries are used up: the history of the job and the options. */
+  private ownerQuestion(task: WorkerTask): string {
+    const L = this.cfg.language;
+    const chain = this.state.tasks.filter((x) => x.jobId === task.jobId);
+    const lines = chain.map((x) => `- ${x.id} (${x.providerId}): ${x.status === 'timeout' ? pick(L, 'таймаут', 'timeout') : pick(L, 'ошибка', 'error')}${x.error ? ` — ${x.error.slice(0, 160)}` : ''}`);
+    return pick(
+      L,
+      `Задача «${task.title}» не выполнена после ${chain.length} попыток (первая и ${chain.length - 1} автоповтора).\nЧто произошло:\n${lines.join('\n')}\nЧто делаем? 1) попробовать ещё раз на конкретном исполнителе (скажите, на каком); 2) переписать или упростить бриф; 3) выполнить самому в основной сессии; 4) отложить задачу.`,
+      `The task «${task.title}» failed after ${chain.length} attempts (the first one and ${chain.length - 1} automatic retries).\nWhat happened:\n${lines.join('\n')}\nWhat do we do? 1) try again on a worker you name; 2) rewrite or simplify the brief; 3) do it myself in the main session; 4) put it off.`,
+    );
+  }
+
+  /** A failed or timed-out task is restarted on another suitable worker, up to `autoRetry` times; then the owner is asked. */
+  private afterFailure(task: WorkerTask) {
+    if (!['failed', 'timeout'].includes(task.status) || this.cancelled || this.budgetExhausted || this.frozen) return;
+    if (/превышен лимит|исчерпан бюджет/.test(task.error ?? '')) return; // stopped on purpose by a cap
+    const max = this.cfg.autoRetry ?? 3;
+    const attempt = task.attempt ?? 1;
+    const L = this.cfg.language;
+    if (attempt <= max) {
+      const p = this.retryProvider(task);
+      if (p) {
+        try {
+          this.delegate({ provider: p.id, role: task.role, title: task.title, spec: task.spec, retry: { of: task.id, jobId: task.jobId ?? task.id, attempt: attempt + 1 } });
+          const next = this.state.tasks[this.state.tasks.length - 1];
+          task.retriedAs = next.id;
+          this.note('system', pick(L, `Автоповтор ${attempt}/${max}: ${task.id} (${task.providerId}) не выполнена (${(task.error ?? task.status).slice(0, 120)}); запускаю ${next.id} на ${next.providerId}`, `Auto-retry ${attempt}/${max}: ${task.id} (${task.providerId}) failed (${(task.error ?? task.status).slice(0, 120)}); starting ${next.id} on ${next.providerId}`));
+          this.emit({ type: 'task', task });
+          return;
+        } catch {
+          /* the chosen worker cannot take it now: ask the owner */
+        }
+      }
+    }
+    task.escalated = true;
+    task.question = this.ownerQuestion(task);
+    this.note('error', task.question);
+    this.emit({ type: 'task', task });
+    this.pushState();
   }
 
   private async captureDiff(task: WorkerTask) {
@@ -381,7 +450,12 @@ export class TaskEngine {
 
   briefStatus(t: WorkerTask): string {
     const cost = t.costUsd != null ? ` cost=$${t.costUsd.toFixed(3)}${t.costEstimated ? '(est.)' : ''}` : '';
-    return `task ${t.id} "${t.title}" [${t.role ?? '-'} · ${t.providerId}/${t.model}] status=${t.status}${t.error ? ' error=' + t.error : ''}${cost}`;
+    const retry = t.retriedAs ? ` auto-retry→${t.retriedAs}` : '';
+    const attempt = (t.attempt ?? 1) > 1 ? ` attempt=${t.attempt}` : '';
+    const ask = t.escalated
+      ? `\nNEEDS OWNER DECISION: automatic retries are used up. Do not delegate this task again. Tell the owner this, in ${replyLang(this.cfg)}, and ask what to do:\n${t.question ?? ''}`
+      : '';
+    return `task ${t.id} "${t.title}" [${t.role ?? '-'} · ${t.providerId}/${t.model}] status=${t.status}${attempt}${retry}${t.error ? ' error=' + t.error : ''}${cost}${ask}`;
   }
 
   describeTask(t: WorkerTask): string {

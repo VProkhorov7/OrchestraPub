@@ -1,5 +1,9 @@
 /* Автоматический перевод интерфейса (DeepSeek, 03.10.2026, выборочно поправлен). Ключ — русский фрагмент, значение — английский. */
 window.I18N_EN = {
+ "Оповещения": "Alerts",
+ "Оповещения: что не сработало или требует внимания": "Alerts: what did not work or needs attention",
+ "Очистить": "Clear",
+ "Оповещений нет: всё в порядке.": "No alerts: everything is fine.",
  "MCP-сессия: оркестратор — внешний агент": "MCP session: the orchestrator is an external agent",
  "Открыть": "Open",
  "$ за 1M вход": "$ per 1M input",
