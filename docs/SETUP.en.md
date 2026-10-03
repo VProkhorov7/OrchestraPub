@@ -111,6 +111,32 @@ Keep repositories on the server's local disk or on an external APFS disk connect
 
 ## 6. Connecting AI agents via MCP
 
+### Who can orchestrate
+
+Any AI agent that speaks MCP can be the orchestrator, the one that plans, hands out tasks and reviews the diffs. The workers do not depend on it: they are always the same.
+
+| Orchestrator | How it connects | What you need |
+|---|---|---|
+| **Claude Code** (Claude Pro or Max subscription) | Orchestra starts `claude` itself and gives it the MCP tools. Or you do it from a terminal or Orca with `claude mcp add` (option A below) | Be signed in to `claude`. The default model, Opus (stronger, uses the limit faster) or Sonnet (cheaper) is chosen in Settings |
+| **Codex CLI** (ChatGPT subscription) | The same through `codex exec` and `codex mcp add`. Experimental | `codex login`. The model is set in Settings |
+| **Claude API** | The orchestrator loop inside Orchestra itself, with a key | The «Claude API» connection. The default model is `claude-opus-5` |
+| **Cursor, agents in Orca, any client with MCP over HTTP** | The address `http://<server>:7777/mcp?repo=…` and the header `Authorization: Bearer <token>` (below) | A running `orchestra serve` |
+
+**Which models are used.** A worker is headless Claude Code that Orchestra points at the provider's address (`ANTHROPIC_BASE_URL`), so any provider with an Anthropic-compatible API will do. The connection list has these ready to add:
+
+| Connection | Default model | Default roles | Price per 1M tokens (input / output) |
+|---|---|---|---|
+| DeepSeek | `deepseek-v4-pro` (small: `deepseek-flash`) | tests, refactoring, docs | $1.32 / $3.96; half price outside peak hours |
+| GLM (z.ai) | `glm-5.3` (small: `glm-5.3-flash`) | features, bugfixes, refactoring | $1.4 / $4.4 |
+| Kimi (Moonshot) | `kimi-k3` | features, bugfixes, tests | the provider's rate |
+| MiniMax | `MiniMax-M3` | tests, refactoring, docs | $0.3 / $1.2 |
+| Qwen (Alibaba) | `qwen3-coder-plus` | features, bugfixes, tests | $1 / $5 |
+| OpenRouter | any, for example `deepseek/deepseek-v4-pro` | your choice | the price of the chosen model |
+| GLM and MiniMax on a coding plan | as above | as above | a flat fee, usage counted in plan credits |
+| Claude through an API key or an aggregator | `claude-sonnet-5` | features, bugfixes, review | the provider's rate |
+
+The prices are for orientation and providers change them; the exact values are in the connection card, where you can edit them. Any other Anthropic-compatible address can be added as «Custom connection». Roles can be changed in the card.
+
 The service exposes MCP at `http://<server>:7777/mcp`. Send the header `Authorization: Bearer <token>`.
 
 **Option A: the agent is the orchestrator.** Add `?repo=` to the address, and the agent gets the tools `list_workers`, `delegate`, `wait_for`, `task_status`, `get_diff`, `merge_task`, `discard_task`, `end_session`.

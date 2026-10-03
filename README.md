@@ -58,6 +58,10 @@ Then open **Settings → Connections**. Add a Claude subscription for the orches
 
 Full guide (home-server install, connections, MCP, Orca, troubleshooting): **[docs/SETUP.en.md](docs/SETUP.en.md)**. Technical reference: **[docs/TECHNICAL.md](docs/TECHNICAL.md)**. All documents: **[docs/README.md](docs/README.md)**.
 
+## Who can orchestrate, and with which models
+
+The orchestrator can be **Claude Code** (a Claude Pro or Max subscription), the **Codex CLI** (a ChatGPT subscription, experimental), the **Claude API**, or any MCP client such as Cursor or an agent in Orca. The workers are headless Claude Code pointed at a cheap provider: DeepSeek (`deepseek-v4-pro`), GLM (`glm-5.3`), Kimi (`kimi-k3`), MiniMax (`MiniMax-M3`), Qwen (`qwen3-coder-plus`), OpenRouter, or any other Anthropic-compatible API. The full table with roles and prices is in [docs/SETUP.en.md](docs/SETUP.en.md#6-connecting-ai-agents-via-mcp).
+
 ## Connect an AI agent through MCP
 
 ```bash

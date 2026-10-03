@@ -58,6 +58,10 @@ npm run serve        # служба: веб-панель + MCP, адрес и т
 
 Подробная инструкция (установка на домашний сервер, подключения, MCP, Orca, решение проблем): **[docs/SETUP.md](docs/SETUP.md)**. Настройка и ежедневная работа в Orca с памятью проекта: **[docs/ORCA.md](docs/ORCA.md)**. Техническое описание: **[docs/TECHNICAL.md](docs/TECHNICAL.md)**. Все документы: **[docs/README.md](docs/README.md)**.
 
+## Кто может оркестрировать и на каких моделях
+
+Оркестратором может быть **Claude Code** (подписка Claude Pro или Max), **Codex CLI** (подписка ChatGPT, экспериментально), **Claude API** или любой клиент с MCP, например Cursor или агент в Orca. Исполнители это headless Claude Code, направленный на дешёвого провайдера: DeepSeek (`deepseek-v4-pro`), GLM (`glm-5.3`), Kimi (`kimi-k3`), MiniMax (`MiniMax-M3`), Qwen (`qwen3-coder-plus`), OpenRouter или любой другой Anthropic-совместимый API. Полная таблица с ролями и ценами: [docs/SETUP.md](docs/SETUP.md#6-подключение-ии-агентов-через-mcp).
+
 ## Подключение к ИИ-агенту через MCP
 
 ```bash

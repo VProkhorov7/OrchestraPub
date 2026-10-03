@@ -110,6 +110,13 @@ export async function launchdLoad(): Promise<void> {
   if (r.code !== 0) throw new Error(`launchctl load: ${(r.stderr || r.stdout).trim()}`);
 }
 
+/** Restart the agent in place (kill and start again). The agent must be loaded. */
+export async function launchdKickstart(): Promise<void> {
+  const uid = typeof process.getuid === 'function' ? process.getuid() : 501;
+  const r = await run(launchctl(), ['kickstart', '-k', `gui/${uid}/${LAUNCH_LABEL}`], process.cwd(), { timeoutMs: 15_000 });
+  if (r.code !== 0) throw new Error(`launchctl kickstart: ${(r.stderr || r.stdout).trim()}`);
+}
+
 export async function launchdUnload(): Promise<void> {
   const r = await run(launchctl(), ['unload', '-w', plistPath()], process.cwd(), { timeoutMs: 15_000 });
   if (r.code !== 0) throw new Error(`launchctl unload: ${(r.stderr || r.stdout).trim()}`);
