@@ -39,7 +39,7 @@ you ── task ──▶ orchestrator (Claude / ChatGPT, on a subscription or a
 | **Service `orchestra serve`** | Web panel, MCP over HTTP for any AI client, and a JSON API. One service on a home server can be reached from a laptop over Tailscale. |
 | **MCP** | Claude Code, Codex, Cursor and agents in Orca can direct Orchestra's workers themselves, or hand a whole task to the autopilot. |
 | **Diagnostics and modes** | Checks the whole environment and switches between «Orca and Orchestra together», «Orca only» and «Orchestra only». It shows the changes first and allows an undo. |
-| **Project memory** | Kept in every repository: a wiki for people, a journal of micro-sessions, a database of facts, a database of decisions with their reasons, a detailed JSON log and a CHANGELOG by stage. Before a task, agents see what was done and why. Memory goes into git with every commit. See [docs/MEMORY.en.md](docs/MEMORY.en.md). |
+| **Project memory** | Kept in every repository: a wiki for people, a journal of micro-sessions, a database of facts, a database of decisions with their reasons, a detailed JSON log and a CHANGELOG by stage. Before a task, agents see what was done and why. It sets itself up on first use of a repository or branch, with no `init`, and goes into git with every commit. See [docs/MEMORY.en.md](docs/MEMORY.en.md). |
 | **English or Russian** | One button switches the interface (machine-translated) and the whole workflow: agent rules, the `/orchestra` command, wiki pages, journal, hook messages, and the models' plans and reports. It includes Karpathy's coding principles and RTK for shorter command output. |
 | **Light and dark theme** | Follows the system, changes by time of day, or stays fixed. |
 
