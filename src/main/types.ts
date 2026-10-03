@@ -194,6 +194,8 @@ export interface WorkerTask {
   /** Automatic retries: the first task of a job is its jobId; every retry is a new task with attempt + 1. */
   jobId?: string;
   attempt?: number;
+  /** Last sign of life from the worker (a log line or usage): a silent cost counter alone is no sign of a hang. */
+  lastActivityAt?: number;
   retryOf?: string;
   retriedAs?: string;
   /** All automatic retries failed: the owner has to decide. `question` is what they are asked. */

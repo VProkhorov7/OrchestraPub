@@ -248,7 +248,7 @@ export class Orchestrator {
       {
         name: 'discard_task',
         description: 'Throw away a task branch and its worktree.',
-        input_schema: { type: 'object', properties: { task_id: { type: 'string' }, reason: { type: 'string' } }, required: ['task_id'] },
+        input_schema: { type: 'object', properties: { task_id: { type: 'string' }, reason: { type: 'string' }, force: { type: 'boolean', description: 'stop a task that is still showing activity' } }, required: ['task_id'] },
       },
       {
         name: 'finish',

@@ -129,8 +129,8 @@ export function registerOrchestraTools(server: McpServer, ctx: ToolContext): voi
 
   tool(
     'discard_task',
-    { description: 'Stop a task if running and delete its branch and worktree.', inputSchema: { task_id: z.string(), reason: z.string().optional() } },
-    guard((a: { task_id: string; reason?: string }) => {
+    { description: 'Stop a task if running and delete its branch and worktree.', inputSchema: { task_id: z.string(), reason: z.string().optional(), force: z.boolean().optional().describe('stop a task that is still showing activity') } },
+    guard((a: { task_id: string; reason?: string; force?: boolean }) => {
       const t = engine.mustTask(a.task_id);
       const r = engine.discard(a);
       engine.note('tool_call', `Отбросить ${t.id} «${t.title}»${a.reason ? ': «' + a.reason + '»' : ''}`);

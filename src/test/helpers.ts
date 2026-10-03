@@ -66,8 +66,10 @@ if(process.env.FAKE_FAIL_ALL||(process.env.FAKE_FAIL_URL&&(process.env.ANTHROPIC
 const file=process.env.FAKE_FILE||'hello.txt';
 out({type:'system',subtype:'init',model:process.env.ANTHROPIC_MODEL});
 const usage={input_tokens:100000,output_tokens:10000,cache_read_input_tokens:0,cache_creation_input_tokens:0};
-out({type:'assistant',message:{id:'m1',usage,content:[{type:'text',text:'Editing.'}]}});
-out({type:'assistant',message:{id:'m1',usage,content:[{type:'tool_use',name:'Write',input:{file_path:file}}]}});
+const mu=process.env.FAKE_NO_USAGE?undefined:usage; // FAKE_NO_USAGE: like z.ai, usage only in the final result
+out({type:'assistant',message:{id:'m1',usage:mu,content:[{type:'text',text:'Editing.'}]}});
+out({type:'assistant',message:{id:'m1',usage:mu,content:[{type:'tool_use',name:'Write',input:{file_path:file}}]}});
+if(process.env.FAKE_SLOW_MS) cp.execSync('sleep '+(Number(process.env.FAKE_SLOW_MS)/1000));
 fs.writeFileSync(file,'hello from '+process.env.ANTHROPIC_MODEL+' via '+process.env.ANTHROPIC_BASE_URL+'\\n');
 cp.execSync('git add -A && git -c user.name=w -c user.email=w@w commit -q -m worker');
 out({type:'result',result:'Changed '+file+' as asked. Verified by reading it back.',total_cost_usd:9.99,usage});

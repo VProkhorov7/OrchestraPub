@@ -301,12 +301,20 @@ export class TaskEngine {
         cwd: task.worktree,
         prompt,
         onLog: (line) => {
+          task.lastActivityAt = Date.now();
           task.log.push(line);
           if (task.log.length > 500) task.log.shift();
           this.emit({ type: 'task_log', taskId: task.id, line });
         },
-        onUsage: (u) => {
-          charge(u);
+        onUsage: (u, estimated) => {
+          task.lastActivityAt = Date.now();
+          if (estimated) {
+            // The provider reports usage only at the end: show an estimate meanwhile; the final usage replaces it.
+            task.tokensIn = u.input;
+            task.tokensOut = u.output;
+            task.costUsd = workerCost(provider, u).usd * priceFactor(provider);
+            task.costEstimated = true;
+          } else charge(u);
           this.checkBudgets();
           if (Date.now() - lastEmit > 2000) {
             lastEmit = Date.now();
@@ -455,7 +463,8 @@ export class TaskEngine {
     const ask = t.escalated
       ? `\nNEEDS OWNER DECISION: automatic retries are used up. Do not delegate this task again. Tell the owner this, in ${replyLang(this.cfg)}, and ask what to do:\n${t.question ?? ''}`
       : '';
-    return `task ${t.id} "${t.title}" [${t.role ?? '-'} · ${t.providerId}/${t.model}] status=${t.status}${attempt}${retry}${t.error ? ' error=' + t.error : ''}${cost}${ask}`;
+    const alive = t.status === 'running' && t.lastActivityAt ? ` (last activity ${Math.round((Date.now() - t.lastActivityAt) / 1000)}s ago: ${(t.log[t.log.length - 1] ?? '').slice(0, 80)}; the cost shown is a live estimate, the provider may report real usage only at the end)` : '';
+    return `task ${t.id} "${t.title}" [${t.role ?? '-'} · ${t.providerId}/${t.model}] status=${t.status}${attempt}${retry}${t.error ? ' error=' + t.error : ''}${cost}${alive}${ask}`;
   }
 
   describeTask(t: WorkerTask): string {
@@ -495,8 +504,15 @@ export class TaskEngine {
     return `merged ${t.id} into ${this.state.baseBranch}\n${r.output}`;
   }
 
-  async discard(input: { task_id: string; reason?: string }): Promise<string> {
+  async discard(input: { task_id: string; reason?: string; force?: boolean }): Promise<string> {
     const t = this.mustTask(input.task_id);
+    // A task that shows signs of life is not stuck, even when its cost counter says $0: do not throw it away by mistake.
+    if (t.status === 'running' && !input.force) {
+      const idle = Math.round((Date.now() - (t.lastActivityAt ?? t.startedAt ?? Date.now())) / 1000);
+      if (idle < 180) {
+        return `REFUSED: ${t.id} is running and was active ${idle}s ago (last line: ${(t.log[t.log.length - 1] ?? '').slice(0, 100)}). A low or zero cost counter is not a sign of a hang: some providers report usage only when the task ends. Keep waiting with wait_for, or call discard_task with force=true if you really want to stop it.`;
+      }
+    }
     const h = this.handles.get(t.id);
     if (h) h.kill();
     if (t.baseSha) await git.removeWorktree(this.state.repo, t.worktree, t.branch, true);

@@ -90,7 +90,7 @@ export function runWorker(opts: {
   prompt: string;
   onLog: (line: string) => void;
   /** Called with cumulative token usage whenever it changes. */
-  onUsage?: (u: Usage) => void;
+  onUsage?: (u: Usage, estimated?: boolean) => void;
 }): WorkerHandle {
   const { cfg, provider, cwd, prompt, onLog, onUsage } = opts;
   const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
@@ -111,6 +111,18 @@ export function runWorker(opts: {
   // stream-json repeats the same API message (with the same usage) once per content block.
   const seenMessages = new Set<string>();
   let stderrBuf = '';
+  // Some providers (z.ai GLM) send token usage only in the final result. Until then the usage is estimated from what
+  // streams by, so a working task does not look idle and spend caps still see it. The final usage replaces the estimate.
+  const est = { turns: 0, ctxChars: 0, inTok: 0, outTok: 0 };
+  const BASE_CTX_TOKENS = 12_000; // Claude Code's own system prompt and tools, sent with every turn
+  const reported = () => usage.input + usage.output + usage.cacheRead + usage.cacheWrite > 0;
+  const estimateTurn = (chars: number) => {
+    est.turns++;
+    est.ctxChars += chars;
+    est.outTok += Math.max(20, chars / 3.5);
+    est.inTok += BASE_CTX_TOKENS + est.ctxChars / 3.5;
+    onUsage?.({ input: Math.round(est.inTok), output: Math.round(est.outTok), cacheRead: 0, cacheWrite: 0 }, true);
+  };
   const timer = setTimeout(() => {
     timedOut = true;
     child.kill('SIGTERM');
@@ -139,7 +151,14 @@ export function runWorker(opts: {
           break;
         case 'assistant': {
           const mid = ev.message?.id;
-          if (ev.message?.usage && (!mid || !seenMessages.has(mid))) {
+          const u = ev.message?.usage;
+          const hasUsage = !!u && (u.input_tokens || u.output_tokens || u.cache_read_input_tokens || u.cache_creation_input_tokens);
+          if (!hasUsage && !reported() && (!mid || !seenMessages.has(mid))) {
+            if (mid) seenMessages.add(mid);
+            const chars = (ev.message?.content ?? []).reduce((n: number, b: any) => n + (b.text?.length ?? 0) + (b.type === 'tool_use' ? JSON.stringify(b.input ?? {}).length : 0), 0);
+            estimateTurn(chars);
+          }
+          if (hasUsage && (!mid || !seenMessages.has(mid))) {
             if (mid) seenMessages.add(mid);
             addUsage(usage, ev.message.usage);
             onUsage?.(usage);
@@ -153,6 +172,7 @@ export function runWorker(opts: {
         }
         case 'user': {
           const blocks = ev.message?.content ?? [];
+          if (!reported()) for (const b of blocks) if (b.type === 'tool_result') est.ctxChars += String(typeof b.content === 'string' ? b.content : JSON.stringify(b.content ?? '')).length;
           for (const b of blocks) {
             if (b.type === 'tool_result' && b.is_error) {
               onLog(`  ! ${clip(String(typeof b.content === 'string' ? b.content : JSON.stringify(b.content)), 300)}`);

@@ -537,7 +537,7 @@ export class Hub {
   }
 
   discard(runId: string, taskId: string) {
-    return this.engineFor(runId).discard({ task_id: taskId });
+    return this.engineFor(runId).discard({ task_id: taskId, force: true }); // a click in the panel is the owner's own decision
   }
 
   worktreeOf(runId: string, taskId: string) {
