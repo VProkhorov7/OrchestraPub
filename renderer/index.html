@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>Orchestra</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="i18n-en.js"></script>
+  <script src="i18n.js"></script>
+  <script src="theme.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+          <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5eead4"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs>
+          <rect x="1" y="1" width="30" height="30" rx="9" fill="#0b1a20" stroke="url(#lg)" stroke-opacity=".55"/>
+          <path d="M7 19 L11 13 L15 21 L19 9 L23 17 L25 14" fill="none" stroke="url(#lg)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="word">Orchestra</span>
+        <span class="ver" id="ver"></span>
+      </div>
+      <div id="runChip" class="runChip idle" title="Текущий запуск"><span class="pulse"></span><span id="runChipText">Нет активного запуска</span></div>
+      <div id="forceChip" class="forceChip" hidden title="Все задачи принудительно идут к этому подключению">все задачи → <span id="forceChipLabel"></span></div>
+      <div id="tariffChip" class="tariffChip" hidden title="Тариф исполнителей с почасовой ценой"><span class="dot"></span><span id="tariffText"></span></div>
+      <div class="topRight">
+        <button id="modeChip" class="modeChip off" title="Режим работы Orca и Orchestra — открыть диагностику"><span class="dot"></span><span id="modeChipText">Режим…</span><span id="modeChipIssues" class="pill warn" hidden></span></button>
+        <button id="langBtn" class="iconBtn" title="Язык интерфейса">RU</button>
+        <button id="themeBtn" class="iconBtn" title="Тема">◐</button>
+        <button id="openSettings" class="iconBtn" title="Настройки, подключения и роли воркеров">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 13.5a7.7 7.7 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.6 7.6 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6a7.7 7.7 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.6Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <span>Настройки</span>
+        </button>
+      </div>
+    </header>
+
+    <aside id="sidebar">
+      <section class="card">
+        <div class="cardHead"><span>Подключения</span><button id="connsSetup" class="link" type="button">настроить →</button></div>
+        <div id="conns" class="conns" title="Подключения: нажмите, чтобы настроить"></div>
+        <div class="env" id="env">проверяю окружение…</div>
+      </section>
+
+      <section class="card step">
+        <div class="stepHead"><span class="num">01</span>Репозиторий</div>
+        <div class="row">
+          <input id="repo" type="text" placeholder="/путь/к/репозиторию" list="knownRepos" />
+          <datalist id="knownRepos"></datalist>
+          <button id="pickRepo" class="ghost square" title="Выбрать папку">…</button>
+        </div>
+        <div id="memBox" class="memBox" hidden>
+          <div class="memHead"><span>Память проекта</span><span id="memStat" class="muted mono"></span></div>
+          <div id="memSession" class="sub"></div>
+          <div class="row wrap">
+            <button id="memInit" class="ghost small" hidden>Включить память</button>
+            <button id="memDigest" class="ghost small">Свежая выжимка</button>
+            <button id="memChangelog" class="ghost small">CHANGELOG этапа</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card step">
+        <div class="stepHead"><span class="num">02</span>Задание</div>
+        <textarea id="goal" rows="6" placeholder="Опишите, что нужно сделать или исправить. Оркестратор разобьёт это на задачи и раздаст воркерам."></textarea>
+        <div class="row">
+          <button id="attachGoal" class="ghost small">Прикрепить файл (.md, .txt)</button>
+        </div>
+      </section>
+
+      <section class="card step">
+        <div class="stepHead"><span class="num">03</span>Запуск</div>
+        <button id="autoPlan" class="secondary wide">Распределить автоматически</button>
+        <div id="picker" class="picker" hidden>
+          <div class="pickHead">Кто будет планировать и вести задачу</div>
+          <div id="pickReason" class="pickReason"></div>
+          <select id="pickSelect"></select>
+          <div id="pickHint" class="hint"></div>
+          <div class="row">
+            <button id="pickOk" class="primary small">Утвердить</button>
+            <button id="pickCancel" class="ghost small">Отмена</button>
+          </div>
+        </div>
+        <div class="row launch">
+          <button id="start" class="primary">Запустить</button>
+          <button id="cancel" class="danger" disabled>Остановить</button>
+        </div>
+        <button id="startOffPeak" class="ghost wide offPeakBtn" hidden><span class="moon">☾</span> В льготное время <span id="offPeakWhen" class="muted mono"></span></button>
+        <div class="hint" id="startHint">Без плана оркестратор распределит задачи сам по ходу работы.</div>
+        <div class="hint forceRoute" title="Все задачи пойдут к выбранному подключению, роли не проверяются">
+          Маршрут всех задач
+          <select id="forceProvider">
+            <option value="">Все задачи: по плану (авто)</option>
+          </select>
+        </div>
+      </section>
+
+      <section id="schedBox" class="card" hidden>
+        <div class="cardHead"><span>Запланировано</span><span id="schedCount" class="mono"></span></div>
+        <div id="schedList" class="schedList"></div>
+      </section>
+
+      <section id="spend" class="card spend" hidden>
+        <div class="cardHead"><span>Расход</span><span id="spendText" class="mono"></span></div>
+        <div class="bar"><div id="spendBar"></div></div>
+        <div id="spendDetail" class="sub"></div>
+        <div id="runMeta" class="meta"></div>
+      </section>
+    </aside>
+
+    <main id="main">
+      <nav class="tabs">
+        <button data-tab="overview" class="active">Обзор <span id="overviewCount" class="pill">0</span></button>
+        <button data-tab="plan">План <span id="planCount" class="pill">0</span></button>
+        <button data-tab="orchestrator">Оркестратор</button>
+        <button data-tab="tasks">Воркеры <span id="taskCount" class="pill">0</span></button>
+        <button data-tab="history">История <span id="historyCount" class="pill">0</span></button>
+        <span class="tabsSpacer"></span>
+        <button data-tab="doctor">Диагностика <span id="doctorBadge" class="pill" hidden></span></button>
+      </nav>
+      <div id="viewing" class="viewing" hidden>
+        <span id="viewingText"></span>
+        <button id="resumeRun" class="primary small" hidden>Продолжить запуск</button>
+        <button id="backToCurrent" class="ghost small">Закрыть</button>
+      </div>
+      <section id="tab-plan" class="tab">
+        <div id="planEmpty" class="empty">
+          <div class="emptyIcon"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="8" y="8" width="32" height="32" rx="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 18h16M16 24h12M16 30h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
+          <div class="emptyTitle">Плана пока нет</div>
+          Опишите задание слева и нажмите «Распределить автоматически»: оркестратор предложит, кто что делает. План можно поправить перед запуском.
+        </div>
+        <div id="planBox" hidden>
+          <div class="planHead">
+            <div id="planSummary" class="summary"></div>
+            <div class="row">
+              <button id="replan" class="ghost">Пересоставить</button>
+              <button id="clearPlan" class="ghost">Сбросить план</button>
+            </div>
+          </div>
+          <div id="planTasks" class="plan"></div>
+        </div>
+      </section>
+
+      <section id="tab-overview" class="tab active">
+        <div id="ovEmpty" class="empty">
+          <div class="emptyIcon"><svg viewBox="0 0 48 48" aria-hidden="true"><rect x="7" y="7" width="15" height="15" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><rect x="26" y="7" width="15" height="15" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><rect x="7" y="26" width="15" height="15" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><rect x="26" y="26" width="15" height="15" rx="4" fill="none" stroke="currentColor" stroke-width="2"/></svg></div>
+          <div class="emptyTitle">Сейчас ничего не запущено</div>
+          Здесь по окошку на каждый идущий запуск (проект): статус, воркеры, расход и последняя строка работы. Окошки обновляются сами и токенов не тратят.
+        </div>
+        <div id="ovGrid" class="ovGrid" data-n="0"></div>
+      </section>
+
+      <section id="tab-orchestrator" class="tab">
+        <div id="transcriptEmpty" class="empty">
+          <div class="emptyIcon"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 30 L15 20 L22 32 L29 12 L36 26 L40 22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="emptyTitle">Здесь будет ход работы оркестратора</div>
+          Как он делит задачу, кому что поручает, что проверяет и почему сливает.
+        </div>
+        <div id="liveTask" hidden>
+          <div class="liveHead">
+            <span id="liveTitle"></span>
+            <span id="liveMeta" class="mono"></span>
+          </div>
+          <pre id="liveTaskLog"></pre>
+        </div>
+        <div id="transcript" class="transcript"></div>
+      </section>
+
+      <section id="tab-tasks" class="tab">
+        <div id="tasks" class="tasks"></div>
+      </section>
+
+      <section id="tab-history" class="tab">
+        <div class="historyHead">
+          <div class="hint">Все запуски сохраняются. Прерванный запуск (приложение закрыли, кончился бюджет, ошибка) можно продолжить с того же места: воркеры, которые не успели доделать, отдадут частичный diff на ревью. Сессии через MCP тоже попадают сюда.</div>
+          <button id="refreshHistory" class="ghost small">Обновить</button>
+        </div>
+        <div id="history" class="history"></div>
+      </section>
+
+      <section id="tab-doctor" class="tab">
+        <div class="docHead">
+          <div>
+            <h2>Orca и Orchestra</h2>
+            <div class="hint">Как они работают вместе на этом компьютере. Выберите режим — перед применением будет показано, что изменится; последнее изменение можно отменить.</div>
+          </div>
+          <div class="row">
+            <button id="docRefresh" class="ghost small">Проверить заново</button>
+            <button id="docUndo" class="ghost small" disabled>Отменить последнее</button>
+          </div>
+        </div>
+        <div id="modeCards" class="modeCards"></div>
+        <div id="docPlan" class="docPlan" hidden></div>
+        <div id="docChecks" class="docGrid"><div class="empty small">Проверяю…</div></div>
+        <div class="card docProjects">
+          <div class="cardHead"><span>Проекты</span><button id="docProjEdit" class="link">где искать…</button></div>
+          <div id="docProjects"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="projDlg">
+    <form method="dialog" class="memDlg">
+      <h2>Где искать проекты</h2>
+      <div class="hint">Папки, в которых лежат git-репозитории (поиск на три уровня вглубь). По одной на строку.</div>
+      <textarea id="projRoots" rows="3"></textarea>
+      <div class="row"><button type="button" id="projFind" class="secondary small">Найти</button><span id="projFound" class="hint"></span></div>
+      <div id="projList" class="projList"></div>
+      <div class="row right">
+        <button type="button" id="projCancel" class="ghost">Отмена</button>
+        <button type="button" id="projSave" class="primary">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settings">
+    <form method="dialog" id="settingsForm">
+      <h2>Настройки</h2>
+
+      <fieldset>
+        <legend>Оркестратор: кто планирует и ревьюит</legend>
+        <div class="modes" id="modes">
+          <label class="mode"><input type="radio" name="orchMode" value="claude-sub" /> <span class="dot" data-light-for="claude-sub"></span> Claude, подписка <small>Claude Code, без API-ключа</small></label>
+          <label class="mode"><input type="radio" name="orchMode" value="codex-sub" /> <span class="dot" data-light-for="codex-sub"></span> ChatGPT, подписка <small>Codex CLI, экспериментально</small></label>
+          <label class="mode"><input type="radio" name="orchMode" value="api" /> <span class="dot" data-light-for="anthropic"></span> Claude API <small>оплата за токены</small></label>
+        </div>
+        <div class="grid2" data-mode-only="claude-sub">
+          <label>Модель Claude Code
+            <select name="orchestrator.claudeModel">
+              <option value="">по умолчанию для подписки</option>
+              <option value="opus">Opus (сильнее, быстрее расходует лимит)</option>
+              <option value="sonnet">Sonnet (экономнее)</option>
+            </select>
+          </label>
+          <div class="hint">Подписка должна быть добавлена в «Подключения» и гореть зелёным.</div>
+        </div>
+        <div class="grid2" data-mode-only="codex-sub">
+          <label>Модель Codex <input name="orchestrator.codexModel" type="text" placeholder="по умолчанию, например gpt-5.6-sol" /></label>
+          <div class="hint warnText">Codex без ручного подтверждения не вызывает MCP-инструменты, поэтому запускается без песочницы, как и воркеры.</div>
+        </div>
+        <div class="grid2" data-mode-only="api">
+          <label>Модель <input name="anthropic.model" type="text" /></label>
+          <label>Максимум токенов за ход <input name="anthropic.maxTokens" type="number" min="1024" step="1024" /></label>
+        </div>
+        <label>Выбор модели для каждой задачи
+          <select name="plannerPick">
+            <option value="ask">рекомендовать и спрашивать меня</option>
+            <option value="auto">брать рекомендацию без вопроса</option>
+            <option value="settings">всегда модель, выбранная здесь</option>
+          </select>
+        </label>
+        <label>Бюджет на запуск, $ (API-расходы воркеров и оркестратора; подписки и планы не в долларах; 0 = без лимита) <input name="runBudgetUsd" type="number" min="0" step="any" /></label>
+        <label>Дополнительные инструкции оркестратору <textarea name="orchestratorPreamble" rows="2" placeholder="например: после каждого слияния запускай npm test"></textarea></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Подключения</legend>
+        <div class="row addRow">
+          <select id="addConn"></select>
+          <button type="button" id="addConnBtn" class="secondary">Добавить</button>
+          <button type="button" id="checkAll" class="ghost">Проверить все</button>
+        </div>
+        <div class="legend">
+          <span><span class="dot green"></span> работает</span>
+          <span><span class="dot yellow"></span> подключено, нет денег или лимит исчерпан</span>
+          <span><span class="dot red"></span> не подключено</span>
+        </div>
+        <div id="providers" class="connCards"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Воркеры: общие настройки</legend>
+        <div class="grid2">
+          <label>Путь к Claude Code <input name="claudePath" type="text" /></label>
+          <label>Путь к Codex CLI <input name="orchestrator.codexPath" type="text" /></label>
+        </div>
+        <div class="grid3">
+          <label>Параллельно, макс. <input name="maxParallel" type="number" min="1" max="12" /></label>
+          <label>Таймаут, мин <input name="workerTimeoutMin" type="number" min="1" /></label>
+          <label class="check"><input name="skipPermissions" type="checkbox" /> без запросов разрешений</label>
+        </div>
+        <label>Правила проекта для воркеров <textarea name="workerPreamble" rows="2" placeholder="команда тестов, стиль кода, что нельзя трогать"></textarea></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Служба orchestra serve (веб-панель и MCP)</legend>
+        <div class="grid2">
+          <label>Адрес (127.0.0.1 = только эта машина; адрес Tailscale = доступ с других Mac) <input name="serve.host" type="text" /></label>
+          <label>Порт <input name="serve.port" type="number" min="1" max="65535" /></label>
+        </div>
+        <div id="serveInfo" class="hint"></div>
+      </fieldset>
+
+      <div class="row right sticky">
+        <button type="button" id="settingsCancel" class="ghost">Отмена</button>
+        <button type="submit" class="primary">Сохранить</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="providerTpl">
+    <div class="conn">
+      <header>
+        <span class="dot big"></span>
+        <div class="title">
+          <div class="name"></div>
+          <div class="cstatus"></div>
+        </div>
+        <span class="badge"></span>
+      </header>
+      <div class="facts"></div>
+      <div class="quotas"></div>
+      <div class="row cardActions">
+        <label class="check work"><input data-k="enabled" type="checkbox" /> брать задачи</label>
+        <span class="spacer"></span>
+        <button type="button" class="ghost small check-one">Проверить</button>
+        <button type="button" class="ghost small toggle">Настроить</button>
+        <button type="button" class="ghost small remove" title="Удалить подключение">✕</button>
+      </div>
+      <div class="edit" hidden>
+        <div class="help"></div>
+        <div class="grid2">
+          <label>id (так его зовёт оркестратор) <input data-k="id" type="text" /></label>
+          <label>название <input data-k="label" type="text" /></label>
+        </div>
+        <div data-api-only>
+          <label>base URL (Anthropic-совместимый; пусто = api.anthropic.com) <input data-k="baseUrl" type="text" /></label>
+          <label>ключ <input data-k="token" type="password" autocomplete="off" /></label>
+        </div>
+        <div class="grid2" data-worker-only>
+          <label>модель <input data-k="model" type="text" /></label>
+          <label data-api-only>малая модель (haiku / субагенты) <input data-k="smallModel" type="text" /></label>
+        </div>
+        <div class="grid4" data-api-only>
+          <label>$ за 1M вход <input data-k="priceIn" data-num type="number" min="0" step="any" /></label>
+          <label>$ за 1M кэш <input data-k="priceCacheRead" data-num type="number" min="0" step="any" /></label>
+          <label>$ за 1M выход <input data-k="priceOut" data-num type="number" min="0" step="any" /></label>
+          <label>лимит $ за запуск <input data-k="maxUsdPerRun" data-num type="number" min="0" step="any" /></label>
+        </div>
+        <div data-worker-only>
+          <label>Роли (какие задачи может брать; ничего не выбрано = любые)</label>
+          <div class="roles" data-roles></div>
+          <label>заметки для оркестратора (сильные стороны, ограничения) <textarea data-k="notes" rows="2"></textarea></label>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <template id="planTaskTpl">
+    <div class="ptask">
+      <header>
+        <span class="pid"></span>
+        <input class="ptitle" type="text" />
+        <select class="prole"></select>
+        <select class="pprov"></select>
+        <button type="button" class="ghost small pdel" title="Убрать из плана">✕</button>
+      </header>
+      <div class="preason"></div>
+      <details><summary>Бриф для воркера</summary><textarea class="pspec" rows="8"></textarea></details>
+      <div class="pdeps"></div>
+    </div>
+  </template>
+
+  <dialog id="memDlg">
+    <form method="dialog" class="memDlg">
+      <h2 id="memDlgTitle">Выжимка</h2>
+      <div id="memDlgBy" class="hint"></div>
+      <pre id="memDlgText"></pre>
+      <div class="row right"><button class="primary">Закрыть</button></div>
+    </form>
+  </dialog>
+  <div id="toasts"></div>
+  <script src="api-web.js"></script>
+  <script src="bigfield.js"></script>
+  <script src="renderer.js"></script>
+  <script src="overview.js"></script>
+</body>
+</html>

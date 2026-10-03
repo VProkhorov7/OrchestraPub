@@ -1,0 +1,13 @@
+model_list:
+  - model_name: gemini-3.8-flash
+    litellm_params:
+      model: gemini/gemini-3.8-flash
+      api_key: os.environ/GEMINI_API_KEY
+  - model_name: gemini-3.1-pro
+    litellm_params:
+      model: gemini/gemini-3.1-pro-preview
+      api_key: os.environ/GEMINI_API_KEY
+
+# Claude Code шлёт поля, которых нет у Gemini (например context_management). Без этой строки мост отвечает 400.
+litellm_settings:
+  drop_params: true

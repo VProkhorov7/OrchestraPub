@@ -1,0 +1,57 @@
+{
+  "name": "orchestra",
+  "productName": "Orchestra",
+  "version": "0.7.5",
+  "description": "Lead model plans and reviews, cheap models write the code: Claude or ChatGPT orchestrates DeepSeek / GLM / Kimi / MiniMax / Qwen workers as headless Claude Code in isolated git worktrees.",
+  "main": "dist/main/main.js",
+  "bin": {
+    "orchestra-mcp": "dist/mcp/server.js",
+    "orchestra-serve": "dist/server/serve.js",
+    "orchestra-memory": "dist/memory/cli.js",
+    "orchestra-doctor": "dist/doctor/cli.js"
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && electron .",
+    "dev": "tsc -p tsconfig.json --watch",
+    "smoke": "npm run build && node dist/test/smoke.js && node dist/test/smoke-resume.js && node dist/test/smoke-mcp.js && node dist/test/smoke-sub.js && node dist/test/smoke-serve.js && node dist/test/smoke-memory.js && node dist/test/smoke-doctor.js && node dist/test/smoke-tariff.js && node dist/test/smoke-limits.js && node dist/test/smoke-balance.js && node dist/test/smoke-service.js && node dist/test/smoke-bigfield.js && node dist/test/smoke-mcp-journal.js && node dist/test/smoke-pricing.js && node dist/test/smoke-restore.js && node dist/test/smoke-lang.js",
+    "mcp": "node dist/mcp/server.js",
+    "dist": "npm run build && electron-builder",
+    "serve": "npm run build && node dist/server/serve.js",
+    "doctor": "node dist/doctor/cli.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "^5.6.0"
+  },
+  "build": {
+    "appId": "dev.orchestra.app",
+    "files": [
+      "dist/**",
+      "renderer/**",
+      "package.json"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/VProkhorov7/OrchestraPub.git"
+  }
+}

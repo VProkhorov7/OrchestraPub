@@ -1,0 +1,46 @@
+import { contextBridge, ipcRenderer } from 'electron';
+
+contextBridge.exposeInMainWorld('orch', {
+  getConfig: () => ipcRenderer.invoke('config:get'),
+  saveConfig: (cfg: unknown) => ipcRenderer.invoke('config:save', cfg),
+  selectRepo: () => ipcRenderer.invoke('repo:select'),
+  checkEnv: () => ipcRenderer.invoke('env:check'),
+  start: (repo: string, goal: string, plan?: unknown, choice?: string) => ipcRenderer.invoke('run:start', { repo, goal, plan, choice }),
+  triage: (goal: string) => ipcRenderer.invoke('plan:triage', { goal }),
+  makePlan: (repo: string, goal: string, choice?: string) => ipcRenderer.invoke('plan:make', { repo, goal, choice }),
+  attachGoalFile: () => ipcRenderer.invoke('goal:attach'),
+  listRoles: () => ipcRenderer.invoke('roles:list'),
+  listCatalog: () => ipcRenderer.invoke('catalog:list'),
+  getHealth: () => ipcRenderer.invoke('health:get'),
+  checkHealth: (id?: string) => ipcRenderer.invoke('health:check', id),
+  memoryStatus: (repo: string) => ipcRenderer.invoke('memory:status', repo),
+  memoryInit: (repo: string, project?: string) => ipcRenderer.invoke('memory:init', repo, project),
+  memoryDigest: (repo: string) => ipcRenderer.invoke('memory:digest', repo),
+  memoryChangelog: (repo: string, release?: string) => ipcRenderer.invoke('memory:changelog', repo, release),
+  doctorReport: () => ipcRenderer.invoke('doctor:report'),
+  doctorPlan: (mode: string) => ipcRenderer.invoke('doctor:plan', mode),
+  doctorApply: (mode: string) => ipcRenderer.invoke('doctor:apply', mode),
+  doctorUndo: () => ipcRenderer.invoke('doctor:undo'),
+  doctorProjects: (projects: string[], roots?: string[]) => ipcRenderer.invoke('doctor:projects', projects, roots),
+  doctorDiscover: (roots: string[]) => ipcRenderer.invoke('doctor:discover', roots),
+  tariff: () => ipcRenderer.invoke('tariff:get'),
+  scheduledList: () => ipcRenderer.invoke('schedule:list'),
+  schedule: (repo: string, goal: string, plan?: unknown, choice?: string) => ipcRenderer.invoke('schedule:add', { repo, goal, plan, choice }),
+  unschedule: (id: string) => ipcRenderer.invoke('schedule:remove', id),
+  startScheduledNow: (id: string) => ipcRenderer.invoke('schedule:now', id),
+  listRuns: () => ipcRenderer.invoke('runs:list'),
+  loadRun: (id: string) => ipcRenderer.invoke('runs:load', id),
+  deleteRun: (id: string) => ipcRenderer.invoke('runs:delete', id),
+  resumeRun: (id: string) => ipcRenderer.invoke('runs:resume', id),
+  cancel: (runId?: string) => ipcRenderer.invoke('run:cancel', runId),
+  getState: (runId?: string) => ipcRenderer.invoke('run:state', runId),
+  mergeTask: (runId: string, id: string) => ipcRenderer.invoke('task:merge', runId, id),
+  discardTask: (runId: string, id: string) => ipcRenderer.invoke('task:discard', runId, id),
+  openWorktree: (runId: string, id: string) => ipcRenderer.invoke('task:openWorktree', runId, id),
+  isWeb: false,
+  onEvent: (cb: (ev: unknown) => void) => {
+    const listener = (_e: unknown, ev: unknown) => cb(ev);
+    ipcRenderer.on('orch:event', listener);
+    return () => ipcRenderer.removeListener('orch:event', listener);
+  },
+});
