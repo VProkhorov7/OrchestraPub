@@ -63,7 +63,9 @@ npm install && npm run build
 npm link          # the commands orchestra-mcp, orchestra-serve and orchestra-memory become available everywhere
 ```
 
-Then, once in every project:
+**Memory sets itself up.** The first time Orchestra touches a repository or a branch without `.memory/` (a run from the panel, an MCP session, a memory tool, the `orchestra-memory` command, a Claude Code hook, choosing the repository in the panel), it creates the memory with no `init`: `.memory/`, the wiki, the rules in `CLAUDE.md` and `AGENTS.md`, the hooks and the `/orchestra` command. Nothing is overwritten. The files go into one small commit at once (a run refuses to start in a repository with uncommitted changes); if your own uncommitted edits are in those files, no commit is made. If a branch has no memory but `main` or `master` does, the files are taken from there, so two branches do not create different copies and conflict when merged. To switch it off: `autoMemory: false` in the service settings, the `ORCHESTRA_NO_AUTOMEMORY` variable, or an empty file `.orchestra-no-memory` in the repository.
+
+By hand (if automatic creation is off, or to set the project name and language), once in the project:
 
 ```bash
 cd ~/Developer/data-c

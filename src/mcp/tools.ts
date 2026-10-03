@@ -5,6 +5,7 @@ import { describeRoles, describeWorkers } from '../main/planner';
 import { AppConfig, ROLES } from '../main/types';
 import { ProjectMemory, checkManualLog } from '../memory/store';
 import { freshDigest } from '../memory/summarize';
+import { ensureMemory } from '../memory/setup';
 
 export const ORCHESTRA_INSTRUCTIONS = (repo: string) =>
   `Orchestra runs cheap AI coding workers (headless Claude Code on DeepSeek / GLM / Kimi / Qwen endpoints, or on a subscription) in isolated git worktrees of ${repo}.
@@ -147,7 +148,8 @@ export function registerOrchestraTools(server: McpServer, ctx: ToolContext): voi
  */
 export function registerMemoryTools(server: McpServer, repo: string, author = 'mcp-agent', summarizeCfg?: () => AppConfig): void {
   const mem = () => {
-    if (!ProjectMemory.exists(repo)) throw new Error(`в ${repo} нет памяти проекта: выполните orchestra-memory init`);
+    ensureMemory(repo); // first use: the memory is created, no init needed
+    if (!ProjectMemory.exists(repo)) throw new Error(`в ${repo} нет памяти проекта (автосоздание выключено: autoMemory, .orchestra-no-memory). Включить вручную: orchestra-memory init`);
     return new ProjectMemory(repo);
   };
   const guard = (fn: (a: any) => Promise<string> | string) => async (a: any) => {

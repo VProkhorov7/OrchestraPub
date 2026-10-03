@@ -8,7 +8,7 @@ import * as path from 'path';
 import { execFileSync, spawnSync } from 'child_process';
 import { ProjectMemory, checkHandoff, checkManualLog } from './store';
 import { APPROVE_RE, approveLatest, checkBrief, describe as describeBrief, listBriefs } from './brief';
-import { setupRepo } from './setup';
+import { ensureMemory, setupRepo } from './setup';
 import { GUARD_DEFAULTS, GuardConfig, GRANT_RE, REVOKE_RE, decide, detectPushDeploys, grant, revoke } from './guard';
 import { Lang, appLanguage, pick, projectLanguage } from './lang';
 
@@ -234,6 +234,7 @@ async function hook(name: string, a: Args) {
     if (grantNote && (process.env.ORCHESTRA_MEMORY_OFF || !ProjectMemory.exists(root))) return hookContext('UserPromptSubmit', grantNote);
   }
 
+  if (!process.env.ORCHESTRA_MEMORY_OFF && !process.env.ORCHESTRA_WORKER && (name === 'session-start' || name === 'prompt')) ensureMemory(root);
   if (process.env.ORCHESTRA_MEMORY_OFF || !ProjectMemory.exists(root)) return;
   const m = new ProjectMemory(root);
   const cfg = m.config();
@@ -398,6 +399,7 @@ async function main() {
   if (!cmd || cmd === 'help' || a.help) return out(pick(L, HELP, HELP_EN));
   if (cmd === 'hook') return hook(a._[1], a);
   if (cmd === 'init') return init(root, a);
+  if (!ProjectMemory.exists(root)) ensureMemory(root); // first use: no init needed
   if (!ProjectMemory.exists(root)) {
     process.stderr.write(pick(L, `В ${root} нет памяти проекта. Выполните: orchestra-memory init\n`, `There is no project memory in ${root}. Run: orchestra-memory init\n`));
     process.exit(2);

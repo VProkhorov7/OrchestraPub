@@ -48,6 +48,8 @@ export interface ProviderConfig {
 export type OrchestratorMode = 'api' | 'claude-sub' | 'codex-sub';
 
 export interface AppConfig {
+  /** Project memory is created by itself on the first use of a repository or branch (default true). Opt out per repository with an empty file `.orchestra-no-memory`. */
+  autoMemory?: boolean;
   /** How many times a failed task is restarted automatically (on another worker when there is one) before the owner is asked. 0 = never. */
   autoRetry?: number;
   /** Watchdogs and notifications: what is watched and where problems are reported (see alerts.ts, watchdog.ts). */

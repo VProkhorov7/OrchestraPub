@@ -27,6 +27,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   runBudgetUsd: 20,
   language: 'ru',
   autoRetry: 3,
+  autoMemory: true,
   notify: { macos: true, macosLevel: 'error', silentMinutes: 8 },
   plannerPick: 'ask',
   serve: { host: '127.0.0.1', port: 7777 },

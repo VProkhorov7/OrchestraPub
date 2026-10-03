@@ -17,6 +17,16 @@ export function appLanguage(): Lang {
   return 'ru';
 }
 
+/** Automatic memory is on unless the app settings say `autoMemory: false` (or ORCHESTRA_NO_AUTOMEMORY is set). */
+export function appAutoMemory(): boolean {
+  if (process.env.ORCHESTRA_NO_AUTOMEMORY) return false;
+  try {
+    return JSON.parse(fs.readFileSync(path.join(orchestraHome(), 'config.json'), 'utf8')).autoMemory !== false;
+  } catch {
+    return true;
+  }
+}
+
 /** A project's workflow language: `language` in .memory/config.json if the owner set one, else the app's. */
 export function projectLanguage(root: string): Lang {
   try {

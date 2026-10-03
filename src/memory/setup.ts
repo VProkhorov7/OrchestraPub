@@ -3,7 +3,7 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { ProjectMemory } from './store';
 import { agentRules, RULES_START, RULES_END, GIT_HOOK, CLAUDE_HOOKS, orchestraCommand, AGENT_ROLES, invariantsTemplate } from './templates';
-import { Lang, pick, projectLanguage } from './lang';
+import { Lang, appAutoMemory, pick, projectLanguage } from './lang';
 import { detectPushDeploys } from './guard';
 
 function git(cwd: string, args: string[]): string {
@@ -183,4 +183,98 @@ export function upgradeFiles(root: string): string[] {
     path.join(root, '.memory', 'config.json'),
     ...kitFiles(root).map((f) => f.file),
   ];
+}
+
+// ---------- memory by itself, on first use ----------
+
+export interface EnsureResult {
+  created: boolean;
+  /** The branch had no memory, but another one did: its files were taken over, so a later merge has nothing to fight over. */
+  adoptedFrom?: string;
+  skipped?: 'exists' | 'off' | 'marker' | 'not-git';
+}
+
+/** Files of `ref` under `dirs` that do not exist in the working tree yet are written there (nothing is overwritten, nothing is staged). */
+function adoptFrom(root: string, ref: string, dirs: string[]): number {
+  let n = 0;
+  const files = git(root, ['ls-tree', '-r', '--name-only', ref, '--', ...dirs]).split('\n').filter(Boolean);
+  for (const f of files) {
+    const dst = path.join(root, f);
+    if (fs.existsSync(dst)) continue;
+    try {
+      const body = execFileSync('git', ['show', `${ref}:${f}`], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 64 * 1024 * 1024 });
+      fs.mkdirSync(path.dirname(dst), { recursive: true });
+      fs.writeFileSync(dst, body);
+      n++;
+    } catch {
+      /* a file that cannot be read is skipped */
+    }
+  }
+  return n;
+}
+
+/**
+ * Project memory on first use: the first time Orchestra (a run, an MCP session, a memory tool, the CLI or a hook) touches
+ * a repository or a branch without `.memory/`, it is set up there, no `init` needed. When another branch already has the
+ * memory (main, master), its files are taken over first, so two branches do not create different copies and conflict later.
+ * Never overwrites anything; does not commit (the run's end commits memory with the rest). Switched off by
+ * `autoMemory: false`, ORCHESTRA_NO_AUTOMEMORY, or an empty file `.orchestra-no-memory` in the repository.
+ */
+export function ensureMemory(root: string): EnsureResult {
+  if (fs.existsSync(path.join(root, '.memory', 'config.json'))) return { created: false, skipped: 'exists' };
+  if (!appAutoMemory()) return { created: false, skipped: 'off' };
+  if (fs.existsSync(path.join(root, '.orchestra-no-memory'))) return { created: false, skipped: 'marker' };
+  if (!git(root, ['rev-parse', '--git-dir'])) return { created: false, skipped: 'not-git' };
+  // The files memory touches. If the owner has uncommitted changes in them, nothing is committed for them.
+  const mine = ['.memory', 'wiki', 'CHANGELOG.md', 'CLAUDE.md', 'AGENTS.md', '.claude', '.githooks'];
+  const cleanBefore = !git(root, ['status', '--porcelain', '--', ...mine]).trim();
+  let adoptedFrom: string | undefined;
+  const here = git(root, ['rev-parse', '--abbrev-ref', 'HEAD']);
+  for (const ref of ['main', 'master', 'origin/main', 'origin/master']) {
+    if (ref === here) continue;
+    const cfgText = git(root, ['show', `${ref}:.memory/config.json`]);
+    if (!cfgText) continue;
+    let wiki = 'wiki';
+    try {
+      wiki = JSON.parse(cfgText).wikiDir || 'wiki';
+    } catch {
+      /* default */
+    }
+    if (adoptFrom(root, ref, ['.memory', wiki]) > 0) {
+      adoptedFrom = ref;
+      break;
+    }
+  }
+  setupRepo(root, {}); // fills in whatever is still missing: rules, hooks, command, starter pages
+  try {
+    new ProjectMemory(root).log({
+      type: 'note',
+      author: 'orchestra',
+      description: adoptedFrom ? `память создана автоматически при первом обращении (взята с ветки ${adoptedFrom})` : 'память создана автоматически при первом обращении',
+    });
+  } catch {
+    /* the journal note is a courtesy */
+  }
+  // One small commit with just those files: a run refuses to start in a repository with uncommitted changes, and
+  // memory that is part of the history follows the branch from now on.
+  if (cleanBefore) {
+    try {
+      const wikiDir = new ProjectMemory(root).config().wikiDir;
+      for (const p of [...mine, wikiDir]) {
+        if (!fs.existsSync(path.join(root, p))) continue;
+        try {
+          execFileSync('git', ['add', '-A', '--', p], { cwd: root, stdio: 'ignore' });
+        } catch {
+          /* ignored by .gitignore: leave it out */
+        }
+      }
+      if (git(root, ['diff', '--cached', '--name-only']).trim()) {
+        const staged = git(root, ['diff', '--cached', '--name-only']).split('\n').filter(Boolean);
+        execFileSync('git', ['-c', 'user.name=orchestra', '-c', 'user.email=orchestra@localhost', 'commit', '--no-verify', '-q', '-m', 'chore(memory): project memory created automatically', '--', ...staged], { cwd: root, stdio: 'ignore', env: { ...process.env, ORCHESTRA_MEMORY_OFF: '1' } });
+      }
+    } catch {
+      /* not committed: the files stay in the working tree */
+    }
+  }
+  return { created: true, adoptedFrom };
 }

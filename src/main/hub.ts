@@ -44,6 +44,7 @@ import { pick } from '../memory/lang';
 import { Alerts } from './alerts';
 import { Watchdog } from './watchdog';
 import { AppConfig, Health, OrchEvent, Plan, PlannerChoice, ROLES, RunState, Triage } from './types';
+import { ensureMemory } from '../memory/setup';
 
 type Controller = Orchestrator | CliOrchestrator;
 export interface Scheduled {
@@ -249,6 +250,7 @@ export class Hub {
   }
 
   async makePlan(repo: string, goal: string, choiceId?: string): Promise<Plan> {
+    this.autoMemory(repo);
     const cfg = await this.readyConfig(choiceId);
     return makePlan(cfg, repo, goal);
   }
@@ -345,7 +347,18 @@ export class Hub {
 
   // ---------- memory for the panel ----------
 
+  /** First use of a repository: memory is created by itself (never fails the caller; the panel is told once). */
+  private autoMemory(repo: string) {
+    try {
+      const r = ensureMemory(repo);
+      if (r.created) this.emit({ type: 'toast', level: 'info', text: pick(this.config().language, `Память проекта создана: ${path.basename(repo)}${r.adoptedFrom ? ` (взята с ветки ${r.adoptedFrom})` : ''}`, `Project memory created: ${path.basename(repo)}${r.adoptedFrom ? ` (taken over from ${r.adoptedFrom})` : ''}`) });
+    } catch {
+      /* memory is a help, not a condition for work */
+    }
+  }
+
   memoryStatus(repo: string) {
+    this.autoMemory(repo);
     if (!ProjectMemory.exists(repo)) return { enabled: false };
     const m = new ProjectMemory(repo);
     const s = m.session();
@@ -380,6 +393,7 @@ export class Hub {
     if (busy) throw new Error(`На этом репозитории уже идёт запуск ${busy.state.runId}`);
     const cfg = await this.readyConfig(choiceId);
     await this.checkRepo(repo);
+    this.autoMemory(repo);
     const c = this.controllerFor(cfg, repo, goal, plan);
     if (opts.offPeakOnly) c.state.offPeakOnly = true;
     return this.launch(c);
@@ -626,6 +640,7 @@ export class Hub {
       return hit.engine;
     }
     if (!(await git.isRepo(key))) throw new Error(`${key} не git-репозиторий. Укажите ?repo=<путь> в адресе MCP-сервера.`);
+    this.autoMemory(key);
     const restored = await this.restoreMcpSession(key);
     if (restored) return restored;
     const cfg = this.config();
