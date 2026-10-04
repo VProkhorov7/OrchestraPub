@@ -195,6 +195,18 @@ codex mcp add orchestra -- node /path/to/Orchestra/dist/mcp/server.js
 | The web panel asks for a token | Run `node dist/server/serve.js --print-token` and open `/?token=…`. |
 | After a server reboot the service is not running | Check automatic user login and `launchctl list \| grep orchestra`, then read `serve.log`. |
 
+### Local models (Ollama, LM Studio and others)
+
+A worker can be a model that runs on your computer or on a neighbouring one: free, with no code sent to the cloud. **Ollama**, **LM Studio** and any server with an Anthropic-compatible `/v1/messages` address (llama.cpp `llama-server`, vLLM) all work. A local model cannot be the orchestrator: that needs a strong model.
+
+**How to connect.** Settings → Connections → «Add» → the «Local models» group: Ollama, LM Studio or «Local server». For Ollama, first pull a model that can call tools (for example `ollama pull qwen3-coder`) and enter its name. For LM Studio, start the local server (Developer → Start Server) and enter a model name from its list. No key is needed. The card turns green when the server answers, the model is there and the context is large enough; the model field suggests the installed models.
+
+**Context: the main thing that breaks.** Claude Code sends about 16,000 tokens with every turn, so the model needs a context of at least 32,768. Ollama on a Mac with up to 24 GB of memory defaults to 4,096, and a worker on such a model does not work. Orchestra checks this (on this Mac's live Ollama the card showed a yellow «context 4,096»). The one-click fix is the **«32K context»** button on the card: it creates a copy of the model with `num_ctx 32768` (the weights are not copied), or set `OLLAMA_CONTEXT_LENGTH=32768` on the server. The button works only for Ollama on the same computer. In LM Studio, load the model with a context of at least 32,768.
+
+**Speed and honest expectations.** We tried a Mac mini with an M4 chip and 16 GB of memory and the `qwen2.5:7b` model: the worker created the file correctly, but a one-line task did not finish within six minutes, because every turn processes about 16,000 tokens again. For regular work you need a machine with more memory and a stronger model; on weak hardware, use a local model for small mechanical tasks and give it a long timeout.
+
+**Defaults for local workers.** A zero price, one task at a time (`maxConcurrent`: a local model serves one request), a task timeout of 60 minutes (`timeoutMin`), the roles «tests», «docs» and «refactor». All of it can be changed on the card. A local worker is used **last**: automatic retry and the peak-hour stand-in choose cloud workers first and take the local one only when nothing else is left; it also does not rate the complexity of tasks.
+
 ### Watchdogs, alerts and automatic retry
 
 **Watchdogs.** The service watches the work itself and tells you when something is wrong:

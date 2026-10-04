@@ -63,7 +63,7 @@ export function workerEnv(provider: ProviderConfig, cfg: AppConfig): NodeJS.Proc
     }
     env.CLAUDE_CONFIG_DIR = home;
     env.ANTHROPIC_BASE_URL = provider.baseUrl;
-    env.ANTHROPIC_AUTH_TOKEN = provider.token;
+    env.ANTHROPIC_AUTH_TOKEN = provider.token || (provider.local ? 'local' : '');
     env.ANTHROPIC_MODEL = provider.model;
     env.ANTHROPIC_DEFAULT_OPUS_MODEL = provider.model;
     env.ANTHROPIC_DEFAULT_SONNET_MODEL = provider.model;
@@ -127,7 +127,7 @@ export function runWorker(opts: {
     timedOut = true;
     child.kill('SIGTERM');
     setTimeout(() => child.kill('SIGKILL'), 5000).unref();
-  }, cfg.workerTimeoutMin * 60_000);
+  }, (provider.timeoutMin || cfg.workerTimeoutMin) * 60_000);
 
   child.stderr!.on('data', (d) => {
     stderrBuf += d.toString();

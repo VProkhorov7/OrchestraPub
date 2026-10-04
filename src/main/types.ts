@@ -43,6 +43,12 @@ export interface ProviderConfig {
   maxUsdPerRun?: number;
   /** Time-of-day tariff: prices above are peak prices, off-peak ones are cheaper (tariff.ts). */
   peak?: import('./tariff').PeakRule;
+  /** A model on this or a nearby machine (Ollama, LM Studio, llama.cpp, vLLM): free, but slower and weaker (localmodels.ts). */
+  local?: 'ollama' | 'lmstudio' | 'other';
+  /** At most this many tasks of this worker at once (a local model serves one at a time). Empty = only the global limit. */
+  maxConcurrent?: number;
+  /** Time limit for one task of this worker, minutes. Empty = the global limit. */
+  timeoutMin?: number;
 }
 
 export type OrchestratorMode = 'api' | 'claude-sub' | 'codex-sub';

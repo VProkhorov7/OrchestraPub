@@ -42,6 +42,7 @@ export function parseReport(report: string): { summary: string; done: string[]; 
 import * as git from './git';
 import { pick } from '../memory/lang';
 import { Alerts } from './alerts';
+import { listLocalModels, prepareOllamaContext } from './localmodels';
 import { Watchdog } from './watchdog';
 import { AppConfig, Health, OrchEvent, Plan, PlannerChoice, ROLES, RunState, Triage } from './types';
 import { ensureMemory } from '../memory/setup';
@@ -146,7 +147,7 @@ export class Hub {
 
   private async recheckBad() {
     for (const p of this.config().providers) {
-      if (p.enabled && ['red', 'yellow'].includes(this.health[p.id]?.light ?? '')) await this.refreshHealth(p.id).catch(() => {});
+      if (p.enabled && (p.local || ['red', 'yellow'].includes(this.health[p.id]?.light ?? ''))) await this.refreshHealth(p.id).catch(() => {});
     }
   }
 
@@ -346,6 +347,20 @@ export class Hub {
   }
 
   // ---------- memory for the panel ----------
+
+  /** Local models: the models the server offers, and (Ollama on this machine) a copy of the model with a 32K context. */
+  async localModels(id: string) {
+    const p = this.config().providers.find((x) => x.id === id);
+    if (!p) throw new Error(`нет подключения «${id}»`);
+    return listLocalModels(p);
+  }
+
+  async localPrepare(id: string) {
+    const p = this.config().providers.find((x) => x.id === id);
+    if (!p) throw new Error(`нет подключения «${id}»`);
+    const model = await prepareOllamaContext(p);
+    return { model };
+  }
 
   /** First use of a repository: memory is created by itself (never fails the caller; the panel is told once). */
   private autoMemory(repo: string) {

@@ -676,7 +676,27 @@ function providerCard(p, open = false) {
   node.querySelector('.help').textContent = pr?.help ?? 'Любой Anthropic-совместимый адрес: base URL, ключ и модель.';
   const edit = node.querySelector('.edit');
   edit.hidden = !open;
-  node.querySelector('.toggle').addEventListener('click', () => (edit.hidden = !edit.hidden));
+  const loadModels = async () => {
+    if (!p.local || !orch.localModels) return;
+    try {
+      const r = await orch.localModels(node.querySelector('[data-k=id]').value.trim() || p.id);
+      $('#localModelList').innerHTML = r.models.map((m) => `<option value="${esc(m)}"></option>`).join('');
+    } catch (err) { /* сервер не запущен: подсказки не будет */ }
+  };
+  node.querySelector('.toggle').addEventListener('click', () => { edit.hidden = !edit.hidden; if (!edit.hidden) loadModels(); });
+  const prep = node.querySelector('.prep-local');
+  prep.hidden = p.local !== 'ollama';
+  prep.addEventListener('click', async () => {
+    prep.disabled = true; prep.textContent = 'Создаю…';
+    try {
+      state.config = readSettings();
+      await orch.saveConfig(state.config);
+      const r = await orch.localPrepare(node.querySelector('[data-k=id]').value.trim());
+      node.querySelector('[data-k=model]').value = r.model;
+      toast(`Создана модель ${r.model} с контекстом 32K. Нажмите «Проверить», потом «Сохранить».`);
+    } catch (err) { toast(err.message ?? String(err), 'error'); }
+    finally { prep.disabled = false; prep.textContent = 'Контекст 32K'; }
+  });
   node.querySelector('.remove').addEventListener('click', () => { node.remove(); fillAddSelect(); });
   node.querySelector('.check-one').addEventListener('click', async (e) => {
     const b = e.currentTarget;
@@ -703,7 +723,7 @@ function paintCard(node) {
   node.querySelector('.dot').className = `dot big ${light}`;
   node.querySelector('.name').textContent = node.querySelector('[data-k=label]').value || p.label || id;
   node.querySelector('.cstatus').textContent = h ? h.text : 'ещё не проверено';
-  node.querySelector('.badge').textContent = BILLING_RU[p.billing ?? 'api'];
+  node.querySelector('.badge').textContent = p.local ? 'локально' : BILLING_RU[p.billing ?? 'api'];
   const facts = [...(h?.details ?? [])];
   if ((p.kind ?? 'api') !== 'codex-sub' && p.model) facts.unshift(`модель: ${p.model}`);
   node.querySelector('.facts').textContent = facts.join(' · ');

@@ -315,6 +315,8 @@
     </form>
   </dialog>
 
+  <datalist id="localModelList"></datalist>
+
   <template id="providerTpl">
     <div class="conn">
       <header>
@@ -330,6 +332,7 @@
       <div class="row cardActions">
         <label class="check work"><input data-k="enabled" type="checkbox" /> брать задачи</label>
         <span class="spacer"></span>
+        <button type="button" class="ghost small prep-local" hidden title="Создать копию модели с контекстом 32 768 токенов: Claude Code присылает около 16 000 токенов на каждый ход, а Ollama по умолчанию даёт 4 096">Контекст 32K</button>
         <button type="button" class="ghost small check-one">Проверить</button>
         <button type="button" class="ghost small toggle">Настроить</button>
         <button type="button" class="ghost small remove" title="Удалить подключение">✕</button>
@@ -345,7 +348,7 @@
           <label>ключ <input data-k="token" type="password" autocomplete="off" /></label>
         </div>
         <div class="grid2" data-worker-only>
-          <label>модель <input data-k="model" type="text" /></label>
+          <label>модель <input data-k="model" type="text" list="localModelList" /></label>
           <label data-api-only>малая модель (haiku / субагенты) <input data-k="smallModel" type="text" /></label>
         </div>
         <div class="grid4" data-api-only>
@@ -353,6 +356,10 @@
           <label>$ за 1M кэш <input data-k="priceCacheRead" data-num type="number" min="0" step="any" /></label>
           <label>$ за 1M выход <input data-k="priceOut" data-num type="number" min="0" step="any" /></label>
           <label>лимит $ за запуск <input data-k="maxUsdPerRun" data-num type="number" min="0" step="any" /></label>
+        </div>
+        <div class="grid4" data-api-only>
+          <label>задач одновременно (пусто = по общему лимиту) <input data-k="maxConcurrent" data-num type="number" min="0" step="1" /></label>
+          <label>таймаут задачи, мин (пусто = общий) <input data-k="timeoutMin" data-num type="number" min="0" step="1" /></label>
         </div>
         <div data-worker-only>
           <label>Роли (какие задачи может брать; ничего не выбрано = любые)</label>

@@ -93,7 +93,7 @@ const REASON: Record<Triage['complexity'], string> = {
 /** Cheapest green pay-per-token or plan worker, for the one short triage call. */
 function cheapestJudge(cfg: AppConfig): ProviderConfig | undefined {
   return cfg.providers
-    .filter((p) => (p.kind ?? 'api') === 'api' && p.token && cfg.health?.[p.id]?.light === 'green')
+    .filter((p) => (p.kind ?? 'api') === 'api' && !p.local && p.token && cfg.health?.[p.id]?.light === 'green')
     .sort((a, b) => (a.billing === 'plan' ? -1 : 0) - (b.billing === 'plan' ? -1 : 0) || (a.priceIn ?? 9) - (b.priceIn ?? 9))[0];
 }
 

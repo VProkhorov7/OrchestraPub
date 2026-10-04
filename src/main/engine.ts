@@ -229,14 +229,26 @@ export class TaskEngine {
     const spent = this.spent().byProvider;
     const pool = role ? this.providersFor(role) : this.cfg.providers.filter((x) => x.enabled && canWork(x));
     const ok = pool.filter((x) => x.id !== from.id && !x.peak && x.billing === 'api' && !(x.maxUsdPerRun && (spent[x.id] ?? 0) >= x.maxUsdPerRun));
-    ok.sort((a, b) => (a.priceOut ?? Infinity) - (b.priceOut ?? Infinity));
+    ok.sort((a, b) => (a.local ? 1 : 0) - (b.local ? 1 : 0) || (a.priceOut ?? Infinity) - (b.priceOut ?? Infinity)); // a local model only when nothing else can
     return ok[0] ?? null;
+  }
+
+  /** Tasks taken from the queue and not finished yet, per worker (a task is not «running» yet while its worktree is being made). */
+  private inflight = new Map<string, number>();
+
+  /** A worker with `maxConcurrent` (a local model serves one task at a time) does not start another task while it is full. */
+  private providerSaturated(p: ProviderConfig): boolean {
+    const max = p.maxConcurrent ?? 0;
+    return max > 0 && (this.inflight.get(p.id) ?? 0) >= max;
   }
 
   private pump(): void {
     while (this.running < this.cfg.maxParallel && this.queue.length && !this.cancelled && !this.budgetExhausted && !this.frozen) {
       // First task whose worker may start now; tasks of a provider in its peak hours wait (off-peak only runs).
-      const idx = this.queue.findIndex((q) => !this.heldUntil(this.cfg.providers.find((p) => p.id === q.providerId)!));
+      const idx = this.queue.findIndex((q) => {
+        const pr = this.cfg.providers.find((p) => p.id === q.providerId)!;
+        return !this.heldUntil(pr) && !this.providerSaturated(pr);
+      });
       if (idx < 0) {
         const nowT = tariffNow().getTime();
         const wake = Math.min(...this.queue.map((q) => this.heldUntil(this.cfg.providers.find((p) => p.id === q.providerId)!)?.getTime() ?? nowT));
@@ -254,8 +266,10 @@ export class TaskEngine {
       }
       const t = this.queue.splice(idx, 1)[0];
       this.running++;
+      this.inflight.set(t.providerId, (this.inflight.get(t.providerId) ?? 0) + 1);
       this.execute(t).finally(() => {
         this.running--;
+        this.inflight.set(t.providerId, Math.max(0, (this.inflight.get(t.providerId) ?? 1) - 1));
         this.pump();
       });
     }
@@ -379,7 +393,7 @@ export class TaskEngine {
     const fresh = pool.filter((p) => !tried.has(p.id));
     const list = fresh.length ? fresh : pool;
     const price = (p: ProviderConfig) => (p.billing !== 'api' ? 0 : p.priceOut ?? Infinity);
-    return [...list].sort((a, b) => price(a) - price(b))[0] ?? null;
+    return [...list].sort((a, b) => (a.local ? 1 : 0) - (b.local ? 1 : 0) || price(a) - price(b))[0] ?? null; // a local model is the last resort: it is free, but slow
   }
 
   /** What the owner is asked when automatic retries are used up: the history of the job and the options. */

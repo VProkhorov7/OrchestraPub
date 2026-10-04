@@ -8,7 +8,7 @@ import { ProviderConfig } from './types';
 export interface Preset {
   /** Stable catalog id; also the provider id the orchestrator sees. */
   id: string;
-  group: 'Подписки' | 'API, оплата за токены' | 'Coding-планы (фикс. цена)';
+  group: 'Подписки' | 'API, оплата за токены' | 'Coding-планы (фикс. цена)' | 'Локальные модели';
   /** Where to get a key / how to log in. */
   help: string;
   /** Can this connection run worker tasks (Codex is orchestrator-only for now). */
@@ -197,6 +197,80 @@ export const PRESETS: Preset[] = [
       model: 'deepseek/deepseek-v4-pro',
       notes: 'Aggregator; model set per connection.',
       roles: [],
+    },
+  },
+
+  // ---------- local models (free, on this or a nearby machine) ----------
+  {
+    id: 'ollama',
+    group: 'Локальные модели',
+    help: 'Установите Ollama (ollama.com) и скачайте модель, которая умеет вызывать инструменты, например `ollama pull qwen3-coder`. Ключ не нужен. Claude Code присылает около 16 000 токенов контекста на каждый ход, поэтому нужен контекст от 32 768 (на Mac с памятью до 24 ГБ Ollama по умолчанию даёт 4 096): кнопка «Контекст 32K» на карточке это исправит. Модель с 7B параметров на 16 ГБ памяти работает, но на простую задачу уходят минуты.',
+    canWork: true,
+    canOrchestrate: false,
+    template: {
+      id: 'ollama',
+      kind: 'api',
+      billing: 'api',
+      preset: 'ollama',
+      local: 'ollama',
+      label: 'Ollama (локально)',
+      baseUrl: 'http://127.0.0.1:11434',
+      model: 'qwen3-coder',
+      notes: 'Local model: free, but much slower and weaker than cloud workers. Give it small, well-specified tasks (tests, docs, mechanical refactoring); one task at a time.',
+      roles: ['tests', 'docs', 'refactor'],
+      priceIn: 0,
+      priceOut: 0,
+      priceCacheRead: 0,
+      maxConcurrent: 1,
+      timeoutMin: 60,
+    },
+  },
+  {
+    id: 'lmstudio',
+    group: 'Локальные модели',
+    help: 'Установите LM Studio (lmstudio.ai), скачайте модель с поддержкой инструментов (например `openai/gpt-oss-20b`) и запустите локальный сервер: вкладка Developer → Start Server (порт 1234). Ключ не нужен. Загружайте модель с контекстом от 32 768. Имя модели смотрите в списке LM Studio.',
+    canWork: true,
+    canOrchestrate: false,
+    template: {
+      id: 'lmstudio',
+      kind: 'api',
+      billing: 'api',
+      preset: 'lmstudio',
+      local: 'lmstudio',
+      label: 'LM Studio (локально)',
+      baseUrl: 'http://127.0.0.1:1234',
+      model: 'openai/gpt-oss-20b',
+      notes: 'Local model: free, but much slower and weaker than cloud workers. Give it small, well-specified tasks (tests, docs, mechanical refactoring); one task at a time.',
+      roles: ['tests', 'docs', 'refactor'],
+      priceIn: 0,
+      priceOut: 0,
+      priceCacheRead: 0,
+      maxConcurrent: 1,
+      timeoutMin: 60,
+    },
+  },
+  {
+    id: 'local-other',
+    group: 'Локальные модели',
+    help: 'Любой локальный сервер с Anthropic-совместимым адресом /v1/messages: llama.cpp (`llama-server`), vLLM и другие. Укажите адрес сервера и имя модели ровно так, как их называет сервер. Нужен контекст от 32 768 и поддержка вызова инструментов.',
+    canWork: true,
+    canOrchestrate: false,
+    template: {
+      id: 'local-other',
+      kind: 'api',
+      billing: 'api',
+      preset: 'local-other',
+      local: 'other',
+      label: 'Локальный сервер',
+      baseUrl: 'http://127.0.0.1:8080',
+      model: '',
+      notes: 'Local model: free, but slower and weaker than cloud workers. Small, well-specified tasks only; one task at a time.',
+      roles: ['tests', 'docs', 'refactor'],
+      priceIn: 0,
+      priceOut: 0,
+      priceCacheRead: 0,
+      maxConcurrent: 1,
+      timeoutMin: 60,
     },
   },
 

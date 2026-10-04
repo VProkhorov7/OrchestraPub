@@ -1,5 +1,6 @@
 import { AppConfig, Health, ProviderConfig } from './types';
 import { run } from './git';
+import { checkLocal, localKind } from './localmodels';
 
 /**
  * Traffic light per connection:
@@ -47,6 +48,10 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms = 20_000): Pr
 
 /** Tiny request to the Anthropic-compatible endpoint: proves key, model and balance in one go. */
 async function checkApi(p: ProviderConfig, cfg: AppConfig): Promise<Health> {
+  if (localKind(p)) {
+    const r = await checkLocal(p);
+    return H(r.light, r.text, { details: r.details });
+  }
   const key = p.token || (p.id === 'anthropic' ? cfg.anthropic.apiKey : '');
   if (!key) return H('red', 'нет ключа');
   const base = (p.baseUrl || 'https://api.anthropic.com').replace(/\/+$/, '');

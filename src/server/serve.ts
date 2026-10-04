@@ -283,6 +283,10 @@ export async function serve(opts: ServeOptions = {}) {
       }
       case 'POST /doctor/discover':
         return json(res, 200, discoverProjects((await body(req)).roots ?? []));
+      case 'GET /local/models':
+        return json(res, 200, await hub.localModels(String(url.searchParams.get('id') ?? '')));
+      case 'POST /local/prepare':
+        return json(res, 200, await hub.localPrepare(String((await body(req)).id ?? '')));
       case 'GET /alerts':
         return json(res, 200, hub.alerts.list());
       case 'POST /alerts/clear':

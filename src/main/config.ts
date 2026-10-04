@@ -54,7 +54,7 @@ export function normalizeConfig(parsed: Partial<AppConfig>): AppConfig {
       // Holidays come from the preset, so saved cards pick up new holiday lists.
       peak: p.peak ? { ...p.peak, holidays: pr?.template.peak?.holidays ?? p.peak.holidays } : pr?.template.peak,
       // Every pay-per-token connection gets a spend cap; an explicit 0 still means «no cap».
-      maxUsdPerRun: p.maxUsdPerRun ?? ((p.kind ?? pr?.template.kind ?? 'api') === 'api' && (p.billing ?? pr?.template.billing ?? 'api') === 'api' ? DEFAULT_MAX_USD_PER_RUN : undefined),
+      maxUsdPerRun: p.maxUsdPerRun ?? ((p.kind ?? pr?.template.kind ?? 'api') === 'api' && (p.billing ?? pr?.template.billing ?? 'api') === 'api' && !(p.local ?? pr?.template.local) ? DEFAULT_MAX_USD_PER_RUN : undefined),
     };
   });
   if (legacy) {
