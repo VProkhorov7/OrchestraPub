@@ -222,6 +222,7 @@ export class Orchestrator {
               description:
                 'Full brief for the worker: context, exact files, required behavior, acceptance criteria, test command, what not to touch.',
             },
+            continue_from: { type: 'string', description: 'Task id of a stopped or failed task: the new worker starts from its branch and finishes the work' },
           },
           required: ['provider', 'role', 'title', 'spec'],
         },
@@ -370,7 +371,7 @@ export class Orchestrator {
         return `exit ${r.code}\n${r.stdout}${r.stderr ? '\n[stderr]\n' + r.stderr : ''}`;
       }
       case 'delegate':
-        return this.engine.delegate(input);
+        return this.engine.delegate({ ...input, continueFrom: input.continue_from });
       case 'wait_for':
         return this.engine.wait(input.task_ids);
       case 'get_diff':

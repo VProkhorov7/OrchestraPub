@@ -62,6 +62,8 @@ export interface AppConfig {
   autoMemory?: boolean;
   /** How many times a failed task is restarted automatically (on another worker when there is one) before the owner is asked. 0 = never. */
   autoRetry?: number;
+  /** Dollars one task may cost before it is stopped (its partial result is kept), per role; `default` for the others. 0 = no cap. */
+  taskCapUsd?: Record<string, number>;
   /** Watchdogs and notifications: what is watched and where problems are reported (see alerts.ts, watchdog.ts). */
   notify?: {
     /** macOS notification centre. */
@@ -211,6 +213,10 @@ export interface WorkerTask {
   /** Last sign of life from the worker (a log line or usage): a silent cost counter alone is no sign of a hang. */
   lastActivityAt?: number;
   retryOf?: string;
+  /** Stopped because it reached a spend cap: the partial result is kept and can be continued (delegate with continue_from). */
+  capped?: boolean;
+  /** This task goes on from the branch of an earlier one. */
+  continuedFrom?: string;
   retriedAs?: string;
   /** All automatic retries failed: the owner has to decide. `question` is what they are asked. */
   escalated?: boolean;

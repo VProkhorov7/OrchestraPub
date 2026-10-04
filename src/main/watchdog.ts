@@ -177,7 +177,7 @@ export class Watchdog {
           level: willRetry ? 'warn' : 'error',
           runId: ev.runId,
           title: pick(L, `Задача ${ev.task.id} (${ev.task.providerId}): ${ev.task.status === 'timeout' ? 'таймаут' : 'ошибка'}`, `Task ${ev.task.id} (${ev.task.providerId}): ${ev.task.status === 'timeout' ? 'timeout' : 'error'}`),
-          text: `${ev.task.title}. ${(ev.task.error ?? '').slice(0, 200)}${willRetry ? pick(L, ' Перезапускается автоматически.', ' Restarting automatically.') : ''}`,
+          text: `${ev.task.title}. ${(ev.task.error ?? '').slice(0, 200)}${willRetry ? pick(L, ' Перезапускается автоматически.', ' Restarting automatically.') : ''}${ev.task.capped ? pick(L, ' Частичный результат сохранён: заберите его или продолжите задачу, не отбрасывайте.', ' The partial result is kept: take it or continue the task, do not discard it.') : ''}`,
         });
       }
     } else if (ev.type === 'health') {

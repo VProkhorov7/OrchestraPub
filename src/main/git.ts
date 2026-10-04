@@ -78,9 +78,9 @@ export async function isDirty(repo: string): Promise<boolean> {
 }
 
 /** Create an isolated worktree on a fresh branch from the repo's HEAD. */
-export async function createWorktree(repo: string, worktreeDir: string, branch: string): Promise<string> {
+export async function createWorktree(repo: string, worktreeDir: string, branch: string, startPoint = 'HEAD'): Promise<string> {
   fs.mkdirSync(path.dirname(worktreeDir), { recursive: true });
-  await git(['worktree', 'add', '-b', branch, worktreeDir, 'HEAD'], repo);
+  await git(['worktree', 'add', '-b', branch, worktreeDir, startPoint], repo);
   return headSha(worktreeDir);
 }
 

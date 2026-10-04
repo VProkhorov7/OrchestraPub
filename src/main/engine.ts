@@ -96,13 +96,31 @@ export class TaskEngine {
     return `spent $${s.total.toFixed(2)}${b ? ` of $${b} budget` : ''} (orchestrator $${s.orchestrator.toFixed(2)}${per ? ', ' + per : ''})`;
   }
 
+  /** What one task of this role may cost, in dollars (0 = no cap). A review only reads, so it gets the smallest cap. */
+  taskCap(t: WorkerTask): number {
+    const caps = this.cfg.taskCapUsd ?? {};
+    const def = { review: 0.5, docs: 0.5, feature: 3, refactor: 3, default: 1.5 } as Record<string, number>;
+    const role = t.role ?? 'default';
+    return caps[role] ?? def[role] ?? caps.default ?? def.default;
+  }
+
   /** Called after any cost change. Stops workers that went over a cap. */
   checkBudgets(): void {
+    for (const t of this.state.tasks) {
+      const cap = this.taskCap(t);
+      if (cap > 0 && t.status === 'running' && !t.capped && (t.costUsd ?? 0) >= cap && this.handles.has(t.id)) {
+        t.capped = true;
+        t.error = `превышен лимит задачи: $${cap} (роль ${t.role ?? '-'})`;
+        this.log('system', `Stopping ${t.id}: it reached the cap of $${cap} for the role "${t.role ?? '-'}". The partial result is kept.`);
+        this.handles.get(t.id)!.kill();
+      }
+    }
     const s = this.spent();
     for (const p of this.cfg.providers) {
       if (!p.maxUsdPerRun || (s.byProvider[p.id] ?? 0) < p.maxUsdPerRun) continue;
       for (const t of this.state.tasks) {
         if (t.providerId === p.id && t.status === 'running' && this.handles.has(t.id)) {
+          t.capped = true;
           t.error = `превышен лимит воркера ${p.id}: $${p.maxUsdPerRun}`;
           this.log('system', `Stopping ${t.id}: worker ${p.id} reached its cap of $${p.maxUsdPerRun}.`);
           this.handles.get(t.id)!.kill();
@@ -137,7 +155,7 @@ export class TaskEngine {
     });
   }
 
-  delegate(input: { provider: string; role?: string; title: string; spec: string; retry?: { of: string; jobId: string; attempt: number } }): string {
+  delegate(input: { provider: string; role?: string; title: string; spec: string; continueFrom?: string; retry?: { of: string; jobId: string; attempt: number } }): string {
     if (this.cancelled) throw new Error('run is cancelled');
     if (this.budgetExhausted || (this.budget() > 0 && this.budgetUsed() >= 1))
       throw new Error(`run budget exhausted (${this.spendReport()}). Do not delegate; merge or discard finished tasks and finish.`);
@@ -192,6 +210,13 @@ export class TaskEngine {
 
     if (forcedId && forcedId !== input.provider) this.log('system', `Принудительный маршрут: запрошен ${input.provider}, выполняет ${forcedId}`);
 
+    let spec = input.spec;
+    let prev: WorkerTask | undefined;
+    if (input.continueFrom) {
+      prev = this.mustTask(input.continueFrom);
+      if (!['failed', 'timeout', 'done'].includes(prev.status)) throw new Error(`task ${prev.id} is ${prev.status}: only a stopped, failed or finished task can be continued`);
+      spec = `This is a CONTINUATION. An earlier worker${prev.error ? ` (${prev.error})` : ''} was stopped before it finished. Its changes are already committed in your worktree (see \`git log\` and \`git diff ${prev.baseSha.slice(0, 8)}\`). Read them, do not start over, and finish what is missing.\n\nEarlier worker's last message:\n${(prev.result || (prev.log[prev.log.length - 1] ?? '')).slice(0, 1500)}\n\nThe task:\n${input.spec}`;
+    }
     const id = `t${(this.state.tasks.length + 1).toString().padStart(2, '0')}`;
     const slug = String(input.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
     const task: WorkerTask = {
@@ -199,9 +224,10 @@ export class TaskEngine {
       title: input.title,
       providerId: provider.id,
       model: provider.model,
-      spec: input.spec,
+      spec,
       role: input.role,
       status: 'queued',
+      continuedFrom: prev?.id,
       branch: `orch/${this.state.runId.replace(/^(run|mcp)-/, '')}-${id}-${slug || 'task'}`,
       worktree: path.join(this.worktreeRoot, this.state.runId, id),
       baseSha: '',
@@ -285,7 +311,8 @@ export class TaskEngine {
   private async execute(task: WorkerTask): Promise<void> {
     const provider = this.cfg.providers.find((p) => p.id === task.providerId)!;
     try {
-      task.baseSha = await git.createWorktree(this.state.repo, task.worktree, task.branch);
+      const from = task.continuedFrom ? this.task(task.continuedFrom) : undefined;
+      task.baseSha = await git.createWorktree(this.state.repo, task.worktree, task.branch, from?.branch);
       task.startedAt = Date.now();
       this.setStatus(task, 'running');
 
@@ -483,11 +510,14 @@ export class TaskEngine {
     const cost = t.costUsd != null ? ` cost=$${t.costUsd.toFixed(3)}${t.costEstimated ? '(est.)' : ''}` : '';
     const retry = t.retriedAs ? ` auto-retry→${t.retriedAs}` : '';
     const attempt = (t.attempt ?? 1) > 1 ? ` attempt=${t.attempt}` : '';
+    const capped = t.capped
+      ? `\nSTOPPED AT A SPEND CAP: the money is spent, but the partial work is kept. Look at get_diff ${t.id}; then either merge_task it as it is, or delegate again with continue_from="${t.id}" (the new worker starts from this branch and finishes the rest; a cheaper worker is fine), or discard_task it. Do not discard it without looking: that loses what was paid for.`
+      : '';
     const ask = t.escalated
       ? `\nNEEDS OWNER DECISION: automatic retries are used up. Do not delegate this task again. Tell the owner this, in ${replyLang(this.cfg)}, and ask what to do:\n${t.question ?? ''}`
       : '';
     const alive = t.status === 'running' && t.lastActivityAt ? ` (last activity ${Math.round((Date.now() - t.lastActivityAt) / 1000)}s ago: ${(t.log[t.log.length - 1] ?? '').slice(0, 80)}; the cost shown is a live estimate, the provider may report real usage only at the end)` : '';
-    return `task ${t.id} "${t.title}" [${t.role ?? '-'} · ${t.providerId}/${t.model}] status=${t.status}${attempt}${retry}${t.error ? ' error=' + t.error : ''}${cost}${alive}${ask}`;
+    return `task ${t.id} "${t.title}" [${t.role ?? '-'} · ${t.providerId}/${t.model}] status=${t.status}${attempt}${retry}${t.error ? ' error=' + t.error : ''}${cost}${alive}${capped}${ask}`;
   }
 
   describeTask(t: WorkerTask): string {

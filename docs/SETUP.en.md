@@ -176,6 +176,7 @@ codex mcp add orchestra -- node /path/to/Orchestra/dist/mcp/server.js
   - At 100% the workers stop (their diffs are saved), no new tasks are issued, and the orchestrator must wrap up.
   - At 125% the run stops.
 - **Per-worker limit**: a worker that exceeds it stops and receives no more tasks.
+- **Per-task cap** by role (`taskCapUsd` in `config.json`; defaults: review and docs $0.5, feature and refactor $3, everything else $1.5; 0 turns it off). A task that reaches it is stopped, but its partial result is kept and is not retried automatically. The orchestrator is told not to discard it: merge it as it is, or delegate with `continue_from=<task id>`, and the new worker starts from the previous branch and finishes the rest.
 - **Subscriptions and coding plans** cost $0 in dollars. The panel shows what the work would have cost through the API (the "subscriptions and plans at API prices" line).
 - Prompt caching reduces the orchestrator's API spend: each later turn is charged only for the new part.
 

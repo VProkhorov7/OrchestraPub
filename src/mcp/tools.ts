@@ -66,12 +66,13 @@ export function registerOrchestraTools(server: McpServer, ctx: ToolContext): voi
         spec: z
           .string()
           .describe('self-contained brief: context, exact files, required behaviour, acceptance criteria, the test command, what not to touch'),
+        continue_from: z.string().optional().describe('task id of a stopped or failed task: the new worker starts from its branch and finishes the work instead of starting over'),
       },
     },
-    guard((a: { provider: string; role: string; title: string; spec: string }) => {
+    guard((a: { provider: string; role: string; title: string; spec: string; continue_from?: string }) => {
       let r: string;
       try {
-        r = engine.delegate(a);
+        r = engine.delegate({ ...a, continueFrom: a.continue_from });
       } catch (e: any) {
         engine.note('error', e?.message ?? String(e));
         throw e;
