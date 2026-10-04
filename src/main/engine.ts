@@ -315,6 +315,8 @@ export class TaskEngine {
         task.apiEquivUsd = full.apiEquiv;
         task.tokensIn = u.input + u.cacheRead + u.cacheWrite;
         task.tokensOut = u.output;
+        task.tokensCacheRead = u.cacheRead;
+        task.tokensCacheWrite = u.cacheWrite;
       };
       const handle = runWorker({
         cfg: this.cfg,

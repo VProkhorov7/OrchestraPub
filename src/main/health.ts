@@ -90,6 +90,20 @@ export function balanceStatus(infos: any[]): { low: boolean; best?: { currency: 
   return { low: best ? best.amount < LOW_BALANCE : false, best };
 }
 
+/** DeepSeek's dollar balance (null when the API does not answer or has no USD wallet). */
+export async function deepseekBalanceUsd(key: string, base: string): Promise<number | null> {
+  try {
+    const r = await fetchWithTimeout(`${new URL(base).origin}/user/balance`, { headers: { authorization: `Bearer ${key}` } }, 10_000);
+    if (!r.ok) return null;
+    const j: any = await r.json();
+    const usd = (j?.balance_infos ?? []).find((b: any) => b?.currency === 'USD');
+    const n = parseFloat(usd?.total_balance);
+    return Number.isNaN(n) ? null : n;
+  } catch {
+    return null;
+  }
+}
+
 async function withDeepseekBalance(key: string, h: Health, base: string): Promise<Health> {
   try {
     const origin = new URL(base).origin;

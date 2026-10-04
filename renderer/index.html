@@ -127,6 +127,7 @@
         <button data-tab="orchestrator">Оркестратор</button>
         <button data-tab="tasks">Воркеры <span id="taskCount" class="pill">0</span></button>
         <button data-tab="history">История <span id="historyCount" class="pill">0</span></button>
+        <button data-tab="spend">Расходы</button>
         <span class="tabsSpacer"></span>
         <button data-tab="doctor">Диагностика <span id="doctorBadge" class="pill" hidden></span></button>
       </nav>
@@ -188,6 +189,16 @@
           <button id="refreshHistory" class="ghost small">Обновить</button>
         </div>
         <div id="history" class="history"></div>
+      </section>
+
+      <section id="tab-spend" class="tab">
+        <div class="historyHead">
+          <div class="hint">Куда ушли деньги и что на них получено. Суммы — оценка Orchestra по ценам из настроек; ниже её можно сверить с настоящим балансом у провайдера.</div>
+          <div class="seg" id="spendDays" role="group" aria-label="Период">
+            <button data-days="1">Сутки</button><button data-days="3" class="active">3 дня</button><button data-days="7">Неделя</button><button data-days="30">Месяц</button>
+          </div>
+        </div>
+        <div id="spendBody" class="spendBody"></div>
       </section>
 
       <section id="tab-doctor" class="tab">
@@ -410,6 +421,7 @@
   <script src="alerts.js"></script>
   <script src="activity.js"></script>
   <script src="freeonly.js"></script>
+  <script src="spend.js"></script>
   <script src="layout.js"></script>
 </body>
 </html>

@@ -637,3 +637,27 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 16
 .hrun .goal .goalText { font-weight: 400; color: var(--text-2); }
 .hrun .sub { font-size: 12.5px; }
 .entry, .ovCard footer, .task .sub { font-size: 12.5px; }
+
+/* «Расходы» */
+.spendBody { display: flex; flex-direction: column; gap: 12px; }
+.spKpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.spKpi { background: var(--s2); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 10px 14px; }
+.spKv { font-size: 24px; font-weight: 600; }
+.spKt { font-size: 12.5px; color: var(--text-2); }
+.spKs { font-size: 12px; color: var(--text-3, var(--text-2)); margin-top: 2px; }
+.spGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 12px; }
+.spGrid h3, .spLedger h3 { margin: 0 0 4px; font-size: 13px; }
+.spT { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.spT th { text-align: left; font-weight: 500; color: var(--text-2); padding: 2px 6px; }
+.spT td { padding: 3px 6px; border-top: 1px solid var(--line); }
+.spBarCell { width: 30%; }
+.spBar { display: block; height: 8px; border-radius: 4px; background: var(--s4); overflow: hidden; }
+.spBar i { display: block; height: 100%; background: var(--accent, #2dd4bf); }
+.spRecon { padding: 6px 0; border-top: 1px solid var(--line); }
+.spRh { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.spForm { flex-wrap: wrap; gap: 8px; }
+.spForm input { min-width: 150px; }
+.seg { display: inline-flex; gap: 2px; }
+.seg button { padding: 4px 10px; border: 1px solid var(--line); background: var(--s2); color: var(--text-2); cursor: pointer; }
+.seg button.active { background: var(--s4); color: var(--text); }
+@media (max-width: 960px) { .spGrid { grid-template-columns: 1fr; } }

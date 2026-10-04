@@ -5,7 +5,9 @@ import { Orchestrator } from './orchestrator';
 import { CliOrchestrator } from './cliorch';
 import { TaskEngine } from './engine';
 import { RunStore, SavedRun } from './runs';
-import { checkAll, checkOne } from './health';
+import { buildReport, loadStates } from './report';
+import { addSnapshot, readLedger, reconcile } from './ledger';
+import { checkAll, checkOne, deepseekBalanceUsd } from './health';
 import { canWork, PRESETS } from './catalog';
 import { makePlan } from './planner';
 import { applyChoice, plannerChoices, settingsChoice, triage } from './triage';
@@ -538,6 +540,28 @@ export class Hub {
     } catch {
       return null;
     }
+  }
+
+  report(days: number) {
+    return buildReport(loadStates(path.join(this.home, 'runs')), days);
+  }
+
+  ledger() {
+    return reconcile(readLedger(path.join(this.home, 'ledger.json')), loadStates(path.join(this.home, 'runs')));
+  }
+
+  /** Record a balance. Without a number, DeepSeek's balance is read from its API. */
+  async snapshot(id: string, balance?: number, unitUsd?: number) {
+    const file = path.join(this.home, 'ledger.json');
+    if (balance === undefined) {
+      const p = this.config().providers.find((x) => x.id === id);
+      if (!p || p.preset !== 'deepseek') throw new Error('Баланс этого подключения вводится вручную');
+      const b = await deepseekBalanceUsd(p.token, p.baseUrl);
+      if (b === null) throw new Error('DeepSeek не отдал баланс в долларах');
+      balance = b;
+    }
+    addSnapshot(file, id, balance, unitUsd);
+    return this.ledger();
   }
 
   listRuns() {

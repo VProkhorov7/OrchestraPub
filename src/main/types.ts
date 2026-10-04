@@ -240,6 +240,9 @@ export interface WorkerTask {
   costEstimated?: boolean;
   tokensIn?: number;
   tokensOut?: number;
+  /** Part of tokensIn served from the provider's cache (cheap) and written to it. */
+  tokensCacheRead?: number;
+  tokensCacheWrite?: number;
   error?: string;
 }
 

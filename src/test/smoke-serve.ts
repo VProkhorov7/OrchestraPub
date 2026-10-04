@@ -87,6 +87,10 @@ function repoIn(tmp: string, name: string) {
   check((await fetch(base + '/api-web.js', { headers: { cookie: 'orch_token=secret' } })).status === 200, 'static js served');
   check(html.includes('id="forceProvider"') && html.includes('Все задачи: по плану (авто)'), 'index.html has the forceProvider select');
   check((await api('GET', '/../package.json')).status === 404, 'no path traversal');
+  const rp = await api('GET', '/api/report?days=7');
+  check(rp.status === 200 && rp.j.days === 7 && Array.isArray(rp.j.byProvider), 'GET /api/report answers');
+  const lg = await api('POST', '/api/ledger', { id: 'p', balance: 5, unitUsd: 2 });
+  check(lg.status === 200 && lg.j.find((x: any) => x.id === 'p')?.last.balance === 5, 'POST /api/ledger records a balance');
 
   // SSE
   const events: any[] = [];

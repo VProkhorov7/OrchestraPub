@@ -294,6 +294,14 @@ export async function serve(opts: ServeOptions = {}) {
       case 'POST /alerts/clear':
         hub.alerts.clearAll();
         return json(res, 200, { ok: true });
+      case 'GET /report':
+        return json(res, 200, hub.report(Math.min(90, Math.max(1, Number(url.searchParams.get('days')) || 3))));
+      case 'GET /ledger':
+        return json(res, 200, hub.ledger());
+      case 'POST /ledger': {
+        const b = await body(req);
+        return json(res, 200, await hub.snapshot(String(b.id ?? ''), b.balance === undefined || b.balance === '' ? undefined : Number(b.balance), b.unitUsd ? Number(b.unitUsd) : undefined));
+      }
       case 'GET /tariff':
         return json(res, 200, hub.tariff());
       case 'GET /scheduled':
