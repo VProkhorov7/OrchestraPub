@@ -1,5 +1,15 @@
 /* Автоматический перевод интерфейса (DeepSeek, 03.10.2026, выборочно поправлен). Ключ — русский фрагмент, значение — английский. */
 window.I18N_EN = {
+ "Только free": "Free only",
+ "Только free: вкл": "Free only: on",
+ "Бесплатные (free tier)": "Free tiers",
+ "OpenRouter · бесплатные модели": "OpenRouter · free models",
+ "(платный: отключён режимом «только бесплатное»)": "(paid: switched off by the free-only mode)",
+ "бесплатный тариф (free tier): разрешён в режиме «только бесплатное», расход считается нулевым": "free tier: allowed in the free-only mode, its cost is counted as zero",
+ "Включён режим «только бесплатное»: платные исполнители и оркестратор по API-ключу отключены.": "Free-only mode is on: paid workers and the API-key orchestrator are switched off.",
+ "Режим «только бесплатное» выключен.": "Free-only mode is off.",
+ "Бесплатных исполнителей пока нет: подключите локальную модель или «OpenRouter · бесплатные модели» (Настройки → Подключения).": "There are no free workers yet: connect a local model or «OpenRouter · free models» (Settings → Connections).",
+ "Режим «только бесплатное»: использовать только то, что ничего не стоит (локальные модели, бесплатные тарифы, бесплатные модели OpenRouter и уже оплаченные подписки). Платные исполнители отключаются.": "Free-only mode: use only what costs nothing (local models, free tiers, OpenRouter free models and the already paid subscriptions). Paid workers are switched off.",
  "не отвечает на": "does not answer at",
  "запустите приложение Ollama или выполните «ollama serve»": "start the Ollama app or run «ollama serve»",
  "нет на сервере: выполните": "is not on the server: run",

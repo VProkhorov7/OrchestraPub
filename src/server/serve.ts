@@ -283,6 +283,8 @@ export async function serve(opts: ServeOptions = {}) {
       }
       case 'POST /doctor/discover':
         return json(res, 200, discoverProjects((await body(req)).roots ?? []));
+      case 'GET /free/models':
+        return json(res, 200, await hub.freeModels());
       case 'GET /local/models':
         return json(res, 200, await hub.localModels(String(url.searchParams.get('id') ?? '')));
       case 'POST /local/prepare':

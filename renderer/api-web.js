@@ -59,6 +59,7 @@
     doctorProjects: (projects, roots) => post('/api/doctor/projects', { projects, roots }),
     doctorDiscover: (roots) => post('/api/doctor/discover', { roots }),
     tariff: () => get('/api/tariff'),
+    freeModels: () => get('/api/free/models'),
     localModels: (id) => get(`/api/local/models?id=${enc(id)}`),
     localPrepare: (id) => post('/api/local/prepare', { id }),
     listAlerts: () => get('/api/alerts'),

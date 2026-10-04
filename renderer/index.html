@@ -26,6 +26,7 @@
       <div id="tariffChip" class="tariffChip" hidden title="Тариф исполнителей с почасовой ценой"><span class="dot"></span><span id="tariffText"></span></div>
       <div class="topRight">
         <button id="modeChip" class="modeChip off" title="Режим работы Orca и Orchestra — открыть диагностику"><span class="dot"></span><span id="modeChipText">Режим…</span><span id="modeChipIssues" class="pill warn" hidden></span></button>
+        <button id="freeBtn" class="freeBtn" title="Режим «только бесплатное»: использовать только то, что ничего не стоит (локальные модели, бесплатные тарифы, бесплатные модели OpenRouter и уже оплаченные подписки). Платные исполнители отключаются." aria-pressed="false"><span class="freeDotBtn"></span><span id="freeLabel">Только free</span></button>
         <button id="alertBtn" class="iconBtn" title="Оповещения: что не сработало или требует внимания" aria-label="Оповещения">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 17h12l-1.5-2V10a4.5 4.5 0 0 0-9 0v5L6 17Zm4 2.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span id="alertCount" class="pill err" hidden>0</span>
@@ -350,6 +351,7 @@
         <div class="grid2" data-worker-only>
           <label>модель <input data-k="model" type="text" list="localModelList" /></label>
           <label data-api-only>малая модель (haiku / субагенты) <input data-k="smallModel" type="text" /></label>
+          <label class="check" data-api-only><input data-k="freeTier" type="checkbox" /> бесплатный тариф (free tier): разрешён в режиме «только бесплатное», расход считается нулевым</label>
         </div>
         <div class="grid4" data-api-only>
           <label>$ за 1M вход <input data-k="priceIn" data-num type="number" min="0" step="any" /></label>
@@ -400,5 +402,6 @@
   <script src="overview.js"></script>
   <script src="alerts.js"></script>
   <script src="activity.js"></script>
+  <script src="freeonly.js"></script>
 </body>
 </html>

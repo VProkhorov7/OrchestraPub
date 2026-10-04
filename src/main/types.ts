@@ -45,6 +45,8 @@ export interface ProviderConfig {
   peak?: import('./tariff').PeakRule;
   /** A model on this or a nearby machine (Ollama, LM Studio, llama.cpp, vLLM): free, but slower and weaker (localmodels.ts). */
   local?: 'ollama' | 'lmstudio' | 'other';
+  /** On a free tier (the owner marks it): allowed in free-only mode, and its cost is counted as 0. */
+  freeTier?: boolean;
   /** At most this many tasks of this worker at once (a local model serves one at a time). Empty = only the global limit. */
   maxConcurrent?: number;
   /** Time limit for one task of this worker, minutes. Empty = the global limit. */
@@ -54,6 +56,8 @@ export interface ProviderConfig {
 export type OrchestratorMode = 'api' | 'claude-sub' | 'codex-sub';
 
 export interface AppConfig {
+  /** The button at the top: use only what costs nothing (local models, free tiers, OpenRouter free models, and the already paid subscriptions). See freetier.ts. */
+  freeOnly?: boolean;
   /** Project memory is created by itself on the first use of a repository or branch (default true). Opt out per repository with an empty file `.orchestra-no-memory`. */
   autoMemory?: boolean;
   /** How many times a failed task is restarted automatically (on another worker when there is one) before the owner is asked. 0 = never. */

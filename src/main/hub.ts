@@ -42,6 +42,7 @@ export function parseReport(report: string): { summary: string; done: string[]; 
 import * as git from './git';
 import { pick } from '../memory/lang';
 import { Alerts } from './alerts';
+import { freeOnlyReason, refreshFreeModels } from './freetier';
 import { listLocalModels, prepareOllamaContext } from './localmodels';
 import { Watchdog } from './watchdog';
 import { AppConfig, Health, OrchEvent, Plan, PlannerChoice, ROLES, RunState, Triage } from './types';
@@ -225,14 +226,15 @@ export class Hub {
       cfg = applyChoice(cfg, c);
     }
     const mode = cfg.orchestrator.mode;
+    if (cfg.freeOnly && mode === 'api') throw new Error('Режим «только бесплатное»: оркестратор по API-ключу платный. Выберите оркестратором подписку (Claude или ChatGPT) или выключите режим.');
     if (mode === 'api' && !anthropicKey(cfg)) throw new Error('Оркестратор в режиме API: добавьте подключение «Claude API» с ключом');
     if (mode !== 'api') {
       if (!cfg.providers.some((p) => p.id === mode)) throw new Error('Добавьте в «Подключения» подписку, выбранную оркестратором');
       const h = this.health[mode];
       if (h?.light === 'red') throw new Error(`Оркестратор недоступен: ${h.text}`);
     }
-    const workers = cfg.providers.filter((p) => p.enabled && canWork(p) && !['red', 'yellow'].includes(this.health[p.id]?.light ?? ''));
-    if (!workers.length) throw new Error('Нет ни одного работающего воркера: включите «брать задачи» у подключения с зелёным статусом');
+    const workers = cfg.providers.filter((p) => p.enabled && canWork(p) && !['red', 'yellow'].includes(this.health[p.id]?.light ?? '') && !freeOnlyReason(cfg, p));
+    if (!workers.length) throw new Error(cfg.freeOnly ? 'Режим «только бесплатное»: нет ни одного бесплатного исполнителя. Подключите локальную модель или OpenRouter с бесплатной моделью (openrouter/free) либо выключите режим.' : 'Нет ни одного работающего воркера: включите «брать задачи» у подключения с зелёным статусом');
     return cfg;
   }
 
@@ -348,6 +350,11 @@ export class Hub {
   }
 
   // ---------- memory for the panel ----------
+
+  /** OpenRouter's free models (for the model field of a free OpenRouter connection). */
+  async freeModels() {
+    return refreshFreeModels();
+  }
 
   /** Local models: the models the server offers, and (Ollama on this machine) a copy of the model with a 32K context. */
   async localModels(id: string) {

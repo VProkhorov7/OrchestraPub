@@ -195,6 +195,20 @@ codex mcp add orchestra -- node /path/to/Orchestra/dist/mcp/server.js
 | The web panel asks for a token | Run `node dist/server/serve.js --print-token` and open `/?token=…`. |
 | After a server reboot the service is not running | Check automatic user login and `launchctl list \| grep orchestra`, then read `serve.log`. |
 
+### Free-only mode
+
+The **«Free only»** button in the panel header turns on a mode in which Orchestra spends no money: paid workers and the orchestrator by API key are switched off (the connection list greys them out), and the orchestrator is told «unavailable: free-only mode». The setting is stored in the service (`freeOnly`), so it is respected by runs from the panel, MCP sessions, the autopilot, automatic retry and the peak-hour stand-in.
+
+**What counts as free:**
+- local models (Ollama, LM Studio and others);
+- connections you marked «free tier», or with an explicit price of 0 (their cost is counted as zero);
+- OpenRouter models that are free at OpenRouter itself: Orchestra takes them from the public list `openrouter.ai/api/v1/models` (price 0), not only by the `:free` suffix;
+- subscriptions (Claude, ChatGPT) and flat-price coding plans: they cost nothing beyond what is already paid, so they stay available.
+
+**Free models through OpenRouter.** Add the connection «OpenRouter · free models» (the «Free tiers» group) and a key from openrouter.ai/keys (a free account). The default model is `openrouter/free`, a router that picks a free model with tool support by itself; you can choose a specific one from the list in the «model» field (free models with tools come first). OpenRouter's limits for free models are 20 requests per minute and 50 per day (1,000 per day if you have ever bought $10 or more of credits). That is why the connection has one task at a time and the roles «tests», «docs» and «refactor», and why you should expect less from these models than from paid ones. If an OpenRouter connection names a paid model, the mode switches it off and says why.
+
+If the mode has no free worker at all, a run does not start, and the panel suggests what to connect.
+
 ### Local models (Ollama, LM Studio and others)
 
 A worker can be a model that runs on your computer or on a neighbouring one: free, with no code sent to the cloud. **Ollama**, **LM Studio** and any server with an Anthropic-compatible `/v1/messages` address (llama.cpp `llama-server`, vLLM) all work. A local model cannot be the orchestrator: that needs a strong model.

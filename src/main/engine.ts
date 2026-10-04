@@ -7,6 +7,7 @@ import { workerPrompt } from './prompts';
 import { workerCost, emptyUsage, Usage } from './pricing';
 import { offPeakNow, stretchEnd, priceFactor, now as tariffNow } from './tariff';
 import { canWork } from './catalog';
+import { freeOnlyReason } from './freetier';
 import { ProjectMemory } from '../memory/store';
 import { pick } from '../memory/lang';
 import { replyLang } from './lang';
@@ -132,7 +133,7 @@ export class TaskEngine {
   providersFor(role: string): ProviderConfig[] {
     return this.cfg.providers.filter((p) => {
       const light = this.cfg.health?.[p.id]?.light;
-      return p.enabled && canWork(p) && light !== 'red' && light !== 'yellow' && (!p.roles?.length || p.roles.includes(role));
+      return p.enabled && canWork(p) && light !== 'red' && light !== 'yellow' && !freeOnlyReason(this.cfg, p) && (!p.roles?.length || p.roles.includes(role));
     });
   }
 
@@ -165,6 +166,12 @@ export class TaskEngine {
       }
       return p;
     })();
+    // Free-only mode: a paid worker is never used, even when the orchestrator asks for it by name.
+    const paidReason = freeOnlyReason(this.cfg, provider);
+    if (paidReason) {
+      const free = (input.role ? this.providersFor(input.role) : this.cfg.providers.filter((x) => x.enabled && canWork(x) && !freeOnlyReason(this.cfg, x))).map((x) => x.id);
+      throw new Error(`${paidReason}. Free workers available: ${free.join(', ') || 'none'}`);
+    }
     // «Off-peak only»: in peak hours a time-of-day worker is swapped for a worker without a tariff, if one can take the task.
     if (!forcedId && this.heldUntil(provider)) {
       const alt = this.offPeakAlternative(provider, input.role);
@@ -227,7 +234,7 @@ export class TaskEngine {
   /** A pay-per-token worker without a tariff that can take the role and has not hit its cap; the cheapest output price first. */
   private offPeakAlternative(from: ProviderConfig, role?: string): ProviderConfig | null {
     const spent = this.spent().byProvider;
-    const pool = role ? this.providersFor(role) : this.cfg.providers.filter((x) => x.enabled && canWork(x));
+    const pool = role ? this.providersFor(role) : this.cfg.providers.filter((x) => x.enabled && canWork(x) && !freeOnlyReason(this.cfg, x));
     const ok = pool.filter((x) => x.id !== from.id && !x.peak && x.billing === 'api' && !(x.maxUsdPerRun && (spent[x.id] ?? 0) >= x.maxUsdPerRun));
     ok.sort((a, b) => (a.local ? 1 : 0) - (b.local ? 1 : 0) || (a.priceOut ?? Infinity) - (b.priceOut ?? Infinity)); // a local model only when nothing else can
     return ok[0] ?? null;
@@ -389,7 +396,7 @@ export class TaskEngine {
     const forced = this.cfg.forceProvider;
     if (forced) return this.cfg.providers.find((p) => p.id === forced && p.enabled && canWork(p)) ?? null;
     const tried = new Set(this.state.tasks.filter((x) => x.jobId === task.jobId).map((x) => x.providerId));
-    const pool = (task.role ? this.providersFor(task.role) : this.cfg.providers.filter((x) => x.enabled && canWork(x))).filter((p) => !this.capReached(p));
+    const pool = (task.role ? this.providersFor(task.role) : this.cfg.providers.filter((x) => x.enabled && canWork(x) && !freeOnlyReason(this.cfg, x))).filter((p) => !this.capReached(p));
     const fresh = pool.filter((p) => !tried.has(p.id));
     const list = fresh.length ? fresh : pool;
     const price = (p: ProviderConfig) => (p.billing !== 'api' ? 0 : p.priceOut ?? Infinity);

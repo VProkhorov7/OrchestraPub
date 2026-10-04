@@ -677,8 +677,14 @@ function providerCard(p, open = false) {
   const edit = node.querySelector('.edit');
   edit.hidden = !open;
   const loadModels = async () => {
-    if (!p.local || !orch.localModels) return;
+    if (!orch.localModels) return;
     try {
+      if (/openrouter/.test(p.baseUrl ?? '') && orch.freeModels) {
+        const list = await orch.freeModels(); // OpenRouter's free models, with tool support first
+        $('#localModelList').innerHTML = list.map((m) => `<option value="${esc(m.id)}">${esc(m.name)}${m.tools ? '' : ' (без инструментов)'} · контекст ${m.context}</option>`).join('');
+        return;
+      }
+      if (!p.local) return;
       const r = await orch.localModels(node.querySelector('[data-k=id]').value.trim() || p.id);
       $('#localModelList').innerHTML = r.models.map((m) => `<option value="${esc(m)}"></option>`).join('');
     } catch (err) { /* сервер не запущен: подсказки не будет */ }
@@ -890,8 +896,9 @@ function renderConns() {
   const orchLight = lightOf(MODE_CONN[mode]);
   const rows = cfg.providers.map((p) => {
     const l = lightOf(p.id);
-    const role = p.kind === 'codex-sub' ? '' : p.enabled ? '' : ' <span class="muted">(не берёт задачи)</span>';
-    return `<div class="connRow" title="${esc(state.health?.[p.id]?.text ?? LIGHT_RU[l])}"><span class="dot ${l}"></span>${esc(p.label)}${role}</div>`;
+    const paid = cfg.freeOnly && p.enabled && p.kind !== 'codex-sub' && !window.isFreeProvider?.(p);
+    const role = p.kind === 'codex-sub' ? '' : paid ? ' <span class="muted">(платный: отключён режимом «только бесплатное»)</span>' : p.enabled ? '' : ' <span class="muted">(не берёт задачи)</span>';
+    return `<div class="connRow${paid ? ' paid' : ''}" title="${esc(state.health?.[p.id]?.text ?? LIGHT_RU[l])}"><span class="dot ${l}"></span>${esc(p.label)}${role}</div>`;
   });
   $('#conns').innerHTML = `<div class="connRow head"><span class="dot ${orchLight}"></span>Оркестратор: ${esc(MODE_RU[mode])}</div>${rows.join('')}`;
 }

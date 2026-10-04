@@ -28,6 +28,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   language: 'ru',
   autoRetry: 3,
   autoMemory: true,
+  freeOnly: false,
   notify: { macos: true, macosLevel: 'error', silentMinutes: 8 },
   plannerPick: 'ask',
   serve: { host: '127.0.0.1', port: 7777 },

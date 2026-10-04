@@ -45,6 +45,7 @@ export function claudeCost(model: string, u: Usage): number {
  */
 export function workerCost(p: ProviderConfig, u: Usage, reported?: number): { usd: number; estimated: boolean; apiEquiv?: number } {
   // Subscriptions and flat coding plans cost no extra dollars per task; keep what it would cost at API prices.
+  if (p.freeTier || p.local) return { usd: 0, estimated: false }; // free by the owner's mark, or a local model
   if (p.kind === 'claude-sub') return { usd: 0, estimated: false, apiEquiv: reported ?? claudeCost('claude-sonnet', u) };
   if (p.billing === 'plan') {
     const equiv = p.priceIn || p.priceOut ? ((u.input + u.cacheWrite) * (p.priceIn ?? 0) + u.output * (p.priceOut ?? 0)) / 1e6 : undefined;

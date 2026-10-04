@@ -1,4 +1,5 @@
 import { replyLang } from './lang';
+import { freeOnlyReason } from './freetier';
 import { AppConfig, Health, PlannerChoice, ProviderConfig, Triage } from './types';
 import { anthropicKey } from './config';
 import { extractJson } from './planner';
@@ -23,7 +24,7 @@ export function plannerChoices(cfg: AppConfig, health: Record<string, Health> = 
     const m = cfg.orchestrator.codexModel;
     out.push({ id: `codex-sub:${m}`, mode: 'codex-sub', model: m, label: `ChatGPT${m ? ' ' + m : ''} · подписка`, hint: 'второй лимит, когда Claude занят; оркестрация через Codex экспериментальная', light: light('codex-sub') });
   }
-  if (anthropicKey(cfg)) {
+  if (anthropicKey(cfg) && !cfg.freeOnly) {
     const l = light('anthropic');
     out.push({ id: 'api:claude-opus-5', mode: 'api', model: 'claude-opus-5', label: 'Claude Opus · API', hint: '$5 / $25 за 1M токенов; без лимитов подписки', light: l });
     out.push({ id: 'api:claude-sonnet-5', mode: 'api', model: 'claude-sonnet-5', label: 'Claude Sonnet · API', hint: '$2 / $10 за 1M; дёшево для простых задач', light: l });
@@ -93,7 +94,7 @@ const REASON: Record<Triage['complexity'], string> = {
 /** Cheapest green pay-per-token or plan worker, for the one short triage call. */
 function cheapestJudge(cfg: AppConfig): ProviderConfig | undefined {
   return cfg.providers
-    .filter((p) => (p.kind ?? 'api') === 'api' && !p.local && p.token && cfg.health?.[p.id]?.light === 'green')
+    .filter((p) => (p.kind ?? 'api') === 'api' && !p.local && p.token && cfg.health?.[p.id]?.light === 'green' && !freeOnlyReason(cfg, p))
     .sort((a, b) => (a.billing === 'plan' ? -1 : 0) - (b.billing === 'plan' ? -1 : 0) || (a.priceIn ?? 9) - (b.priceIn ?? 9))[0];
 }
 

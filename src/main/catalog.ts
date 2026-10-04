@@ -8,7 +8,7 @@ import { ProviderConfig } from './types';
 export interface Preset {
   /** Stable catalog id; also the provider id the orchestrator sees. */
   id: string;
-  group: 'Подписки' | 'API, оплата за токены' | 'Coding-планы (фикс. цена)' | 'Локальные модели';
+  group: 'Подписки' | 'API, оплата за токены' | 'Coding-планы (фикс. цена)' | 'Локальные модели' | 'Бесплатные (free tier)';
   /** Where to get a key / how to log in. */
   help: string;
   /** Can this connection run worker tasks (Codex is orchestrator-only for now). */
@@ -271,6 +271,31 @@ export const PRESETS: Preset[] = [
       priceCacheRead: 0,
       maxConcurrent: 1,
       timeoutMin: 60,
+    },
+  },
+
+  // ---------- free tiers ----------
+  {
+    id: 'openrouter-free',
+    group: 'Бесплатные (free tier)',
+    help: 'Ключ: openrouter.ai/keys (бесплатный аккаунт). Бесплатные модели OpenRouter не стоят ничего, но с лимитами: 20 запросов в минуту и 50 в день (1000 в день, если когда-либо пополняли счёт на $10 и больше). `openrouter/free` сам выбирает бесплатную модель с поддержкой инструментов; конкретную можно выбрать из списка в поле «модель». Модели слабее и медленнее платных: давайте им небольшие задачи.',
+    canWork: true,
+    canOrchestrate: false,
+    template: {
+      id: 'openrouter-free',
+      kind: 'api',
+      billing: 'api',
+      preset: 'openrouter-free',
+      freeTier: true,
+      label: 'OpenRouter · бесплатные модели',
+      baseUrl: 'https://openrouter.ai/api',
+      model: 'openrouter/free',
+      notes: 'Free OpenRouter models: no cost, but rate limits (20 requests/min, 50/day without credits) and weaker quality. Small, well-specified tasks; one task at a time.',
+      roles: ['tests', 'docs', 'refactor'],
+      priceIn: 0,
+      priceOut: 0,
+      priceCacheRead: 0,
+      maxConcurrent: 1,
     },
   },
 

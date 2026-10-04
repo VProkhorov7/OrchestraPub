@@ -572,3 +572,10 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 16
 .feedDot.wait { background: var(--warn); }
 .alertPanel #feedBox { display: flex; flex-direction: column; min-height: 0; }
 .alertPanel #feedBox[hidden] { display: none; }
+
+/* ---------- режим «только бесплатное» ---------- */
+.freeBtn { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; padding: 6px 11px; border-radius: 999px; }
+.freeDotBtn { width: 8px; height: 8px; border-radius: 50%; background: var(--line-2); }
+.freeBtn.on { border-color: var(--ok); color: var(--ok); background: var(--ok-soft); font-weight: 600; }
+.freeBtn.on .freeDotBtn { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.connRow.paid { opacity: .55; }

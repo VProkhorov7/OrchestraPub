@@ -7,6 +7,7 @@ import { anthropicKey } from './config';
 import { cliEnv } from './health';
 import { memoryBriefing } from '../memory/prompt';
 import { replyLang } from './lang';
+import { freeOnlyReason } from './freetier';
 
 export function describeWorkers(cfg: AppConfig): string {
   const billing = { api: 'pay per token', plan: 'flat-price coding plan (no extra $ per task)', subscription: 'subscription (shares limits with the orchestrator)' };
@@ -16,7 +17,8 @@ export function describeWorkers(cfg: AppConfig): string {
     .map((p) => {
       const roles = p.roles?.length ? p.roles.join(', ') : 'any';
       const h = cfg.health?.[p.id];
-      const status = h && (h.light === 'red' || h.light === 'yellow') ? ` UNAVAILABLE (${h.text}) — do not delegate to it.` : '';
+      const paid = freeOnlyReason(cfg, p);
+      const status = paid ? ` UNAVAILABLE (${paid}) — do not delegate to it.` : h && (h.light === 'red' || h.light === 'yellow') ? ` UNAVAILABLE (${h.text}) — do not delegate to it.` : '';
       const skipped = forced && p.id !== forced.id ? ' (не будет использован: включён принудительный маршрут)' : '';
       return `- id="${p.id}" (${p.label}, model ${p.model || 'default'}, ${billing[p.billing ?? 'api']}) roles: [${roles}]. ${p.notes}${status}${skipped}`;
     });
