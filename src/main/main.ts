@@ -114,8 +114,12 @@ ipcMain.handle('runs:resume', (_e, runId: string) => hub.resume(runId));
 
 ipcMain.handle('task:merge', (_e, runId: string, id: string) => hub.merge(runId, id));
 ipcMain.handle('task:discard', (_e, runId: string, id: string) => hub.discard(runId, id));
-ipcMain.handle('task:openWorktree', (_e, runId: string, id: string) => {
+ipcMain.handle('task:openWorktree', async (_e, runId: string, id: string) => {
   const wt = hub.worktreeOf(runId, id);
-  if (wt) shell.openPath(wt);
-  return true;
+  const r = await hub.openWorktree(runId, id, false); // finds out why it cannot be opened
+  if (wt && r.path && !r.opened && !r.message.startsWith('Рабочей папки') && !r.message.startsWith('The working folder')) {
+    const err = await shell.openPath(wt);
+    return err ? err : undefined;
+  }
+  return r.opened ? undefined : r.message;
 });

@@ -108,7 +108,7 @@ function renderTask(t) {
         if (b.dataset.act === 'discard') toast(await orch.discardTask(runId, t.id));
         if (b.dataset.act === 'open') {
           const msg = await orch.openWorktree(runId, t.id);
-          if (typeof msg === 'string') toast(msg);
+          if (typeof msg === 'string') toast(msg, /^(Рабочей папки|The working folder|Задача .* не найдена|Task .* not found)/.test(msg) ? 'error' : 'info');
         }
         if (state.viewing && b.dataset.act !== 'open') openRun(state.viewing); // saved runs get no live events
       } catch (e) { toast(e.message ?? String(e), 'error'); }

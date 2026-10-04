@@ -75,13 +75,22 @@
     getState: (runId) => get(runId ? `/api/runs/${enc(runId)}` : '/api/runs/current'),
     mergeTask: (runId, id) => post(`/api/runs/${enc(runId)}/tasks/${enc(id)}/merge`),
     discardTask: (runId, id) => post(`/api/runs/${enc(runId)}/tasks/${enc(id)}/discard`),
+    // The service opens the folder in Finder when this browser is on the same machine; otherwise the path is copied.
     openWorktree: async (runId, id) => {
-      const p = await get(`/api/runs/${enc(runId)}/tasks/${enc(id)}/worktree`);
-      if (p) {
-        let copied = '';
-        try { await navigator.clipboard.writeText(p); copied = ' (путь скопирован)'; } catch (e) { /* not allowed */ }
-        return `Worktree на сервере: ${p}${copied}`;
+      let r;
+      try {
+        r = await post(`/api/runs/${enc(runId)}/tasks/${enc(id)}/open`);
+      } catch (e) {
+        // A service that is older than this page (not restarted yet) has no «open» address: copy the path as before.
+        const path = await get(`/api/runs/${enc(runId)}/tasks/${enc(id)}/worktree`);
+        r = { opened: false, path, message: `Worktree на сервере: ${path}` };
       }
+      if (r && r.path && !r.opened && !/^(Рабочей папки|The working folder)/.test(r.message)) {
+        let copied = '';
+        try { await navigator.clipboard.writeText(r.path); copied = ' (путь скопирован)'; } catch (e) { /* not allowed */ }
+        return `${r.message}${copied}`;
+      }
+      return r && r.message;
     },
     info: () => get('/api/info'),
     onEvent: (cb) => {

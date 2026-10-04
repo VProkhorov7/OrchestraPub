@@ -46,6 +46,7 @@ import { listLocalModels, prepareOllamaContext } from './localmodels';
 import { Watchdog } from './watchdog';
 import { AppConfig, Health, OrchEvent, Plan, PlannerChoice, ROLES, RunState, Triage } from './types';
 import { ensureMemory } from '../memory/setup';
+import { execFile } from 'child_process';
 
 type Controller = Orchestrator | CliOrchestrator;
 export interface Scheduled {
@@ -567,6 +568,32 @@ export class Hub {
 
   discard(runId: string, taskId: string) {
     return this.engineFor(runId).discard({ task_id: taskId, force: true }); // a click in the panel is the owner's own decision
+  }
+
+  /**
+   * «Открыть worktree»: show the task's folder in Finder (or the system file manager). Says why when it cannot:
+   * the task is unknown, or the folder is gone (the task was discarded, or someone removed it).
+   */
+  async openWorktree(runId: string, taskId: string, allowOpen = true): Promise<{ opened: boolean; path?: string; message: string }> {
+    const L = this.config().language;
+    const t = this.state(runId)?.tasks.find((x) => x.id === taskId);
+    if (!t) return { opened: false, message: pick(L, `Задача ${taskId} не найдена`, `Task ${taskId} not found`) };
+    const wt = t.worktree;
+    if (!wt || !fs.existsSync(wt)) {
+      return {
+        opened: false,
+        path: wt,
+        message: pick(
+          L,
+          `Рабочей папки больше нет: ${wt}. Так бывает, если задачу отбросили или папку удалили; правки могли остаться только в ветке ${t.branch}${t.status === 'discarded' ? ' (она тоже удалена при отбрасывании)' : ''}.`,
+          `The working folder is gone: ${wt}. This happens when the task was discarded or the folder was deleted; the changes may only be left in the branch ${t.branch}${t.status === 'discarded' ? ' (it was deleted too when the task was discarded)' : ''}.`,
+        ),
+      };
+    }
+    if (!allowOpen) return { opened: false, path: wt, message: pick(L, `Папка на сервере: ${wt}`, `Folder on the server: ${wt}`) };
+    const cmd = process.env.ORCHESTRA_OPEN_CMD || (process.platform === 'darwin' ? 'open' : 'xdg-open');
+    await new Promise<void>((resolve) => execFile(cmd, [wt], () => resolve()));
+    return { opened: true, path: wt, message: pick(L, `Открыл папку: ${wt}`, `Opened the folder: ${wt}`) };
   }
 
   worktreeOf(runId: string, taskId: string) {

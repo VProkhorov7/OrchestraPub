@@ -321,6 +321,12 @@ export async function serve(opts: ServeOptions = {}) {
         return json(res, 200, await hub.merge(runId, taskId));
       case 'POST /runs/:id/tasks/:tid/discard':
         return json(res, 200, await hub.discard(runId, taskId));
+      case 'POST /runs/:id/tasks/:tid/open': {
+        // Only a browser on this very machine can have the folder opened here; a remote one gets the path instead.
+        const a = req.socket.remoteAddress ?? '';
+        const local = a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
+        return json(res, 200, await hub.openWorktree(runId, taskId, local));
+      }
       case 'GET /runs/:id/tasks/:tid/worktree':
         return json(res, 200, hub.worktreeOf(runId, taskId) ?? null);
       default:
