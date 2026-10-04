@@ -70,6 +70,8 @@ export interface AppConfig {
     macosLevel?: 'warn' | 'error';
     /** A worker that shows no activity for this many minutes is reported. */
     silentMinutes?: number;
+    /** Warn when one running task has cost this many dollars (default 1; 0 = off). */
+    taskCostWarnUsd?: number;
     /** Optional URL that receives every alert as a plain-text POST (works with ntfy.sh and similar). */
     webhook?: string;
   };

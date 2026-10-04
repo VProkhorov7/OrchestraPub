@@ -87,6 +87,14 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   wd.onEvent({ type: 'task', runId: 'r1', task: { ...task, status: 'failed', error: 'git status --porcelain failed' } } as any);
   check(emitted2.length === before + 1 && /Task t02 \(glm\): error/.test(emitted2[emitted2.length - 1].title), 'a failed task is reported once (not on every event)');
 
+  wd.onEvent({ type: 'task', runId: 'r1', task: { ...task, id: 't07', status: 'done', log: ['I need your OK before copying Secrets.xcconfig into this worktree'] } } as any);
+  check(emitted2.some((a) => /t07.*waiting for an answer/.test(a.title)), 'a worker that stopped with a question is reported at once');
+  wd.onEvent({ type: 'task', runId: 'r1', task: { ...task, id: 't08', status: 'done', log: ['All done, tests pass.'] } } as any);
+  check(!emitted2.some((a) => /t08/.test(a.title)), 'a normal finish is not reported');
+  task.costUsd = 1.2;
+  wd.tick();
+  check(emitted2.some((a) => /t02.*cost \$1\.20 already/.test(a.title)), 'a running task that already cost $1 is reported');
+
   const H = (light: string, text = '') => ({ glm: { light, text, checkedAt: 0 } });
   wd.onEvent({ type: 'health', health: H('green') } as any);
   wd.onEvent({ type: 'health', health: H('red', 'key rejected') } as any);

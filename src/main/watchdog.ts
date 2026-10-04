@@ -19,6 +19,10 @@ export interface WatchHost {
 }
 
 const SILENT_DEFAULT_MIN = 8;
+/** One task that has already cost this much while still running is worth a look (cfg.notify.taskCostWarnUsd). */
+const TASK_COST_WARN_USD = 1;
+/** The worker's last words are a question or a request for permission: it stopped and waits for a human. */
+const WAITING = /\?\s*$|нужн\w+ (ваш|разрешени)|жду (ваш|разрешени|ответ|ok)|\bneed your\b|\bpermission\b|\bapprove\b|\bconfirm\b|разрешени/i;
 
 export class Watchdog {
   private act = new Map<string, { sig: string; at: number }>();
@@ -82,6 +86,18 @@ export class Watchdog {
             ),
           });
         }
+        const warnUsd = cfg.notify?.taskCostWarnUsd ?? TASK_COST_WARN_USD;
+        if (warnUsd > 0 && (task.costUsd ?? 0) >= warnUsd)
+          this.alerts.raise(
+            {
+              key: `taskcost:${k}`,
+              level: 'warn',
+              runId: s.runId,
+              title: pick(L, `Задача ${task.id} (${task.providerId}) уже стоит $${(task.costUsd ?? 0).toFixed(2)}`, `Task ${task.id} (${task.providerId}) has cost $${(task.costUsd ?? 0).toFixed(2)} already`),
+              text: `${task.title}. ` + pick(L, 'Она ещё идёт. Если это не ожидаемо, отбросьте её, пока не потрачено больше.', 'It is still running. If this is unexpected, discard it before more is spent.'),
+            },
+            24 * 60 * 60_000,
+          );
         if (!fs.existsSync(task.worktree)) {
           this.alerts.raise({
             key: `worktree:${k}`,
@@ -146,6 +162,14 @@ export class Watchdog {
           runId: ev.runId,
           title: pick(L, `Нужно ваше решение: «${ev.task.title}» не выполняется`, `Your decision is needed: «${ev.task.title}» does not work`),
           text: ev.task.question ?? '',
+        });
+      } else if (prev !== ev.task.status && ev.task.status === 'done' && WAITING.test((ev.task.log[ev.task.log.length - 1] ?? '').trim())) {
+        this.alerts.raise({
+          key: `waiting:${k}`,
+          level: 'error',
+          runId: ev.runId,
+          title: pick(L, `Воркер ${ev.task.id} (${ev.task.providerId}) остановился и ждёт ответа`, `Worker ${ev.task.id} (${ev.task.providerId}) stopped and is waiting for an answer`),
+          text: `${ev.task.title}. ` + (ev.task.log[ev.task.log.length - 1] ?? '').slice(0, 300),
         });
       } else if (prev !== ev.task.status && (ev.task.status === 'failed' || ev.task.status === 'timeout')) {
         this.alerts.raise({
