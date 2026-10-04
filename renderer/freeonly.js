@@ -12,7 +12,7 @@ function freePaint() {
   const b = $('#freeBtn');
   b.classList.toggle('on', on);
   b.setAttribute('aria-pressed', String(on));
-  $('#freeLabel').textContent = on ? 'Только free: вкл' : 'Только free';
+  $('#freeLabel').textContent = on ? 'Free: вкл' : 'Free';
 }
 
 $('#freeBtn').addEventListener('click', async () => {

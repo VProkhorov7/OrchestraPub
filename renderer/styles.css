@@ -591,3 +591,49 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 16
 .connToggle:disabled { opacity: .6; cursor: progress; }
 .connRow.disabled .connName { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line-2); }
 .dot.off { background: #0a0a0a; box-shadow: 0 0 0 2px #3a4352; }
+
+/* ---------- порядок: шапка, меню «⋯», док запуска, свёрнутые подключения, история ---------- */
+.topRight { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+.runChip { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; }
+.runChip > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.freeBtn { white-space: nowrap; }
+.menuWrap { position: relative; }
+.moreMenu { position: absolute; right: 0; top: calc(100% + 8px); min-width: 260px; background: var(--s1); border: 1px solid var(--line-2); border-radius: var(--r-lg); box-shadow: var(--shadow); padding: 6px; z-index: 40; }
+.moreMenu[hidden] { display: none; }
+.menuRow { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 6px 8px; font-size: 13px; color: var(--text-2); }
+.menuRow .iconBtn, .menuRow .modeChip { white-space: nowrap; }
+@media (max-width: 1100px) {
+  #tariffChip #tariffText, #forceChip { display: none; }
+  #tariffChip, #forceChip { padding-left: 8px; padding-right: 8px; }
+}
+@media (max-width: 960px) {
+  #openSettings span { display: none; }
+  #topbar { gap: 8px; }
+}
+
+/* док запуска: кнопки «Распределить / Запустить / Остановить» всегда на виду */
+#sidebar > .dock { position: sticky; bottom: 0; z-index: 5; background: var(--s1); border-color: var(--line-2); box-shadow: 0 -10px 18px -10px rgba(0, 0, 0, 0.5); }
+:root[data-theme="light"] #sidebar > .dock { box-shadow: 0 -10px 18px -12px rgba(15, 23, 34, 0.25); }
+.runMore { font-size: 12.5px; color: var(--muted); }
+.runMore summary { cursor: pointer; padding: 2px 0; }
+.runMore[open] { max-height: 38vh; overflow: auto; }
+
+/* подключения: свёрнутый список показывает только то, что требует внимания */
+.conns.folded .connRow:not(.head):not(.attention):not(.summary) { display: none; }
+.connRow.summary { color: var(--muted); font-size: 12px; cursor: default; }
+.connRow.attention { background: var(--err-soft); }
+.lockTag { flex: none; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line-2); border-radius: 999px; padding: 0 6px; }
+.connName { overflow: hidden; text-overflow: ellipsis; }
+
+/* тумблер: крупнее, зона клика шире, бегунок виден на зелёной дорожке (контраст не меньше 3:1) */
+.connToggle { width: 38px; height: 22px; }
+.connToggle span { width: 16px; height: 16px; top: 2px; left: 2px; }
+.connToggle.on span { transform: translateX(16px); background: #04261b; }
+:root[data-theme="light"] .connToggle.on span { background: #fff; }
+.connToggle::after { content: ""; position: absolute; inset: -8px -6px; }
+.connRow.disabled .connToggle.off { border-color: #5b6677; }
+
+/* история: проект крупно, цель и путь вторично */
+.hrun .goal .goalText { font-weight: 400; color: var(--text-2); }
+.hrun .sub { font-size: 12.5px; }
+.entry, .ovCard footer, .task .sub { font-size: 12.5px; }

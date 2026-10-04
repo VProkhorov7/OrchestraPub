@@ -570,15 +570,17 @@ async function loadHistory() {
     const el = document.createElement('div');
     el.className = 'hrun';
     const goal = r.goal.split('\n').find((l) => l.trim()) ?? '';
+    const proj = (r.repo || '').split('/').filter(Boolean).pop()?.replace(/ - Code$/, '') || r.runId;
+    const generic = /^MCP-сессия/.test(goal);
     el.innerHTML = `
-      <div class="goal" title="${esc(r.goal)}">${esc(goal)}${r.source === 'mcp' ? '<span class="src">MCP</span>' : ''}</div>
+      <div class="goal" title="${esc(r.goal)}">${esc(proj)}${generic ? '' : `<span class="goalText"> · ${esc(goal)}</span>`}${r.source === 'mcp' ? '<span class="src">MCP</span>' : ''}</div>
       <div class="actions">
         <span class="status ${r.status}">${RUN_RU[r.status] ?? r.status}</span>
         <button data-act="open" class="ghost small">Открыть</button>
         ${r.resumable ? '<button data-act="resume" class="primary small">Продолжить</button>' : ''}
         ${r.status !== 'running' ? '<button data-act="delete" class="ghost small" title="Удалить из истории (ветки в git не трогает)">✕</button>' : ''}
       </div>
-      <div class="sub">${fmtDate(r.startedAt)} · ${esc(r.repo)} · задач ${r.tasks}, слито ${r.merged} · ${usd(r.costUsd)}</div>`;
+      <div class="sub" title="${esc(r.repo)}">${fmtDate(r.startedAt)}${generic ? ' · внешний оркестратор' : ''} · задач ${r.tasks}, слито ${r.merged} · ${usd(r.costUsd)}</div>`;
     el.querySelector('[data-act=open]').addEventListener('click', () => openRun(r.runId));
     el.querySelector('[data-act=resume]')?.addEventListener('click', () => resumeRun(r.runId));
     el.querySelector('[data-act=delete]')?.addEventListener('click', async () => {
@@ -872,7 +874,12 @@ async function openSettings() {
 }
 $('#openSettings').addEventListener('click', openSettings);
 $('#conns').addEventListener('click', openSettings);
-$('#connsSetup').addEventListener('click', openSettings);
+$('#connsSetup').addEventListener('click', (e) => { e.stopPropagation(); openSettings(); });
+$('#connsFold').addEventListener('click', (e) => {
+  e.stopPropagation();
+  try { localStorage.setItem('orchestra-conns-folded', $('#conns').classList.contains('folded') ? '0' : '1'); } catch (err) { /* ignore */ }
+  renderConns();
+});
 $('#settingsCancel').addEventListener('click', () => dlg.close());
 form.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -897,13 +904,20 @@ function renderConns() {
   const rows = cfg.providers.map((p) => {
     const l = p.kind !== 'codex-sub' && !p.enabled ? 'off' : lightOf(p.id);
     const paid = cfg.freeOnly && p.enabled && p.kind !== 'codex-sub' && !window.isFreeProvider?.(p);
-    const role = p.kind === 'codex-sub' ? '' : paid ? ' <span class="muted">(платный: отключён режимом «только бесплатное»)</span>' : p.enabled ? '' : ' <span class="muted">(не берёт задачи)</span>';
+    const role = paid ? ' <span class="lockTag" title="Платный: отключён режимом «только бесплатное»">платный</span>' : '';
     const tip = p.enabled ? 'Выключить: исполнитель не будет получать задачи' : 'Включить: исполнитель снова будет получать задачи';
     const toggle = p.kind === 'codex-sub' ? '' : `<button type="button" class="connToggle ${p.enabled ? 'on' : 'off'}" data-toggle="${esc(p.id)}" role="switch" aria-checked="${!!p.enabled}" title="${tip}"><span></span></button>`;
     const off = p.kind !== 'codex-sub' && !p.enabled;
-    return `<div class="connRow${paid ? ' paid' : ''}${off ? ' disabled' : ''}" title="${esc(off ? 'Выключено' : state.health?.[p.id]?.text ?? LIGHT_RU[l])}"><span class="dot ${l}"></span><span class="connName">${esc(p.label)}${role}</span>${toggle}</div>`;
+    const attention = p.kind !== 'codex-sub' && p.enabled && (l === 'red' || l === 'yellow');
+    return `<div class="connRow${paid ? ' paid' : ''}${off ? ' disabled' : ''}${attention ? ' attention' : ''}" title="${esc(off ? 'Выключено' : state.health?.[p.id]?.text ?? LIGHT_RU[l])}"><span class="dot ${l}"></span><span class="connName">${esc(p.label)}${role}</span>${toggle}</div>`;
   });
-  $('#conns').innerHTML = `<div class="connRow head"><span class="dot ${orchLight}"></span>Оркестратор: ${esc(MODE_RU[mode])}</div>${rows.join('')}`;
+  const folded = (() => { try { return localStorage.getItem('orchestra-conns-folded') === '1'; } catch (e) { return false; } })();
+  const hidden = cfg.providers.filter((p) => !(p.kind !== 'codex-sub' && p.enabled && ['red', 'yellow'].includes(lightOf(p.id)))).length;
+  $('#conns').classList.toggle('folded', folded);
+  const fold = $('#connsFold');
+  fold.textContent = folded ? 'развернуть' : 'свернуть';
+  fold.setAttribute('aria-expanded', String(!folded));
+  $('#conns').innerHTML = `<div class="connRow head"><span class="dot ${orchLight}"></span>Оркестратор: ${esc(MODE_RU[mode])}</div>${rows.join('')}${folded && hidden ? `<div class="connRow summary">ещё ${hidden}: работают или выключены</div>` : ''}`;
 }
 
 // Вкл/выкл подключения прямо в списке слева: упало в красное — можно выключить, не заходя в «Настройки».

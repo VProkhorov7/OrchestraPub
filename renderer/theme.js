@@ -17,7 +17,7 @@
   function apply() {
     document.documentElement.dataset.theme = effective();
     const b = document.getElementById('themeBtn');
-    if (b) { b.textContent = { system: '◐', schedule: '◔', light: '☀', dark: '☾' }[mode]; b.title = LABEL[mode] + ' (нажмите, чтобы сменить)'; b.setAttribute('aria-label', LABEL[mode]); }
+    if (b) { b.textContent = { system: '◐ как в системе', schedule: '◔ по времени', light: '☀ светлая', dark: '☾ тёмная' }[mode]; b.title = LABEL[mode] + ' (нажмите, чтобы сменить)'; b.setAttribute('aria-label', LABEL[mode]); }
   }
   apply();
   if (media && media.addEventListener) media.addEventListener('change', apply);

@@ -25,14 +25,19 @@
       <div id="forceChip" class="forceChip" hidden title="Все задачи принудительно идут к этому подключению">все задачи → <span id="forceChipLabel"></span></div>
       <div id="tariffChip" class="tariffChip" hidden title="Тариф исполнителей с почасовой ценой"><span class="dot"></span><span id="tariffText"></span></div>
       <div class="topRight">
-        <button id="modeChip" class="modeChip off" title="Режим работы Orca и Orchestra — открыть диагностику"><span class="dot"></span><span id="modeChipText">Режим…</span><span id="modeChipIssues" class="pill warn" hidden></span></button>
-        <button id="freeBtn" class="freeBtn" title="Режим «только бесплатное»: использовать только то, что ничего не стоит (локальные модели, бесплатные тарифы, бесплатные модели OpenRouter и уже оплаченные подписки). Платные исполнители отключаются." aria-pressed="false"><span class="freeDotBtn"></span><span id="freeLabel">Только free</span></button>
+        <button id="freeBtn" class="freeBtn" title="Режим «только бесплатное»: использовать только то, что ничего не стоит (локальные модели, бесплатные тарифы, бесплатные модели OpenRouter и уже оплаченные подписки). Платные исполнители отключаются." aria-pressed="false"><span class="freeDotBtn"></span><span id="freeLabel">Free</span></button>
         <button id="alertBtn" class="iconBtn" title="Оповещения: что не сработало или требует внимания" aria-label="Оповещения">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 17h12l-1.5-2V10a4.5 4.5 0 0 0-9 0v5L6 17Zm4 2.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span id="alertCount" class="pill err" hidden>0</span>
         </button>
-        <button id="langBtn" class="iconBtn" title="Язык интерфейса">RU</button>
-        <button id="themeBtn" class="iconBtn" title="Тема">◐</button>
+        <div class="menuWrap">
+          <button id="moreBtn" class="iconBtn" type="button" title="Вид и режим: язык, тема, режим Orca" aria-haspopup="true" aria-expanded="false" aria-controls="moreMenu">⋯</button>
+          <div id="moreMenu" class="moreMenu" hidden>
+            <div class="menuRow"><span>Язык</span><button id="langBtn" class="iconBtn" title="Язык интерфейса">RU</button></div>
+            <div class="menuRow"><span>Тема</span><button id="themeBtn" class="iconBtn" title="Тема">◐</button></div>
+            <div class="menuRow"><span>Режим Orca</span><button id="modeChip" class="modeChip off" title="Режим работы Orca и Orchestra — открыть диагностику"><span class="dot"></span><span id="modeChipText">Режим…</span><span id="modeChipIssues" class="pill warn" hidden></span></button></div>
+          </div>
+        </div>
         <button id="openSettings" class="iconBtn" title="Настройки, подключения и роли воркеров">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 13.5a7.7 7.7 0 0 0 0-3l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5A7.6 7.6 0 0 0 7 6.5l-2.4-1-2 3.4 2 1.6a7.7 7.7 0 0 0 0 3l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.4 1 2-3.4-2-1.6Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
           <span>Настройки</span>
@@ -42,7 +47,7 @@
 
     <aside id="sidebar">
       <section class="card">
-        <div class="cardHead"><span>Подключения</span><button id="connsSetup" class="link" type="button">настроить →</button></div>
+        <div class="cardHead"><span>Подключения</span><span><button id="connsFold" class="link" type="button" aria-expanded="true">свернуть</button> · <button id="connsSetup" class="link" type="button">настроить →</button></span></div>
         <div id="conns" class="conns" title="Подключения: нажмите, чтобы настроить"></div>
         <div class="env" id="env">проверяю окружение…</div>
       </section>
@@ -73,7 +78,7 @@
         </div>
       </section>
 
-      <section class="card step">
+      <section id="runDock" class="card step dock">
         <div class="stepHead"><span class="num">03</span>Запуск</div>
         <button id="autoPlan" class="secondary wide">Распределить автоматически</button>
         <div id="picker" class="picker" hidden>
@@ -91,6 +96,7 @@
           <button id="cancel" class="danger" disabled>Остановить</button>
         </div>
         <button id="startOffPeak" class="ghost wide offPeakBtn" hidden><span class="moon">☾</span> В льготное время <span id="offPeakWhen" class="muted mono"></span></button>
+        <details class="runMore"><summary>Ещё: подсказка и маршрут</summary>
         <div class="hint" id="startHint">Без плана оркестратор распределит задачи сам по ходу работы.</div>
         <div class="hint forceRoute" title="Все задачи пойдут к выбранному подключению, роли не проверяются">
           Маршрут всех задач
@@ -98,6 +104,7 @@
             <option value="">Все задачи: по плану (авто)</option>
           </select>
         </div>
+        </details>
       </section>
 
       <section id="schedBox" class="card" hidden>
@@ -403,5 +410,6 @@
   <script src="alerts.js"></script>
   <script src="activity.js"></script>
   <script src="freeonly.js"></script>
+  <script src="layout.js"></script>
 </body>
 </html>
