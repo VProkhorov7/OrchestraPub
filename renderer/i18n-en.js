@@ -1,5 +1,8 @@
 /* Автоматический перевод интерфейса (DeepSeek, 03.10.2026, выборочно поправлен). Ключ — русский фрагмент, значение — английский. */
 window.I18N_EN = {
+ "Выключить: исполнитель не будет получать задачи": "Switch off: the worker will get no tasks",
+ "Включить: исполнитель снова будет получать задачи": "Switch on: the worker will get tasks again",
+ "Выключено": "Switched off",
  "Только free": "Free only",
  "Только free: вкл": "Free only: on",
  "Бесплатные (free tier)": "Free tiers",

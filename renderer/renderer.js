@@ -895,13 +895,36 @@ function renderConns() {
   const mode = cfg.orchestrator?.mode ?? 'claude-sub';
   const orchLight = lightOf(MODE_CONN[mode]);
   const rows = cfg.providers.map((p) => {
-    const l = lightOf(p.id);
+    const l = p.kind !== 'codex-sub' && !p.enabled ? 'off' : lightOf(p.id);
     const paid = cfg.freeOnly && p.enabled && p.kind !== 'codex-sub' && !window.isFreeProvider?.(p);
     const role = p.kind === 'codex-sub' ? '' : paid ? ' <span class="muted">(платный: отключён режимом «только бесплатное»)</span>' : p.enabled ? '' : ' <span class="muted">(не берёт задачи)</span>';
-    return `<div class="connRow${paid ? ' paid' : ''}" title="${esc(state.health?.[p.id]?.text ?? LIGHT_RU[l])}"><span class="dot ${l}"></span>${esc(p.label)}${role}</div>`;
+    const tip = p.enabled ? 'Выключить: исполнитель не будет получать задачи' : 'Включить: исполнитель снова будет получать задачи';
+    const toggle = p.kind === 'codex-sub' ? '' : `<button type="button" class="connToggle ${p.enabled ? 'on' : 'off'}" data-toggle="${esc(p.id)}" role="switch" aria-checked="${!!p.enabled}" title="${tip}"><span></span></button>`;
+    const off = p.kind !== 'codex-sub' && !p.enabled;
+    return `<div class="connRow${paid ? ' paid' : ''}${off ? ' disabled' : ''}" title="${esc(off ? 'Выключено' : state.health?.[p.id]?.text ?? LIGHT_RU[l])}"><span class="dot ${l}"></span><span class="connName">${esc(p.label)}${role}</span>${toggle}</div>`;
   });
   $('#conns').innerHTML = `<div class="connRow head"><span class="dot ${orchLight}"></span>Оркестратор: ${esc(MODE_RU[mode])}</div>${rows.join('')}`;
 }
+
+// Вкл/выкл подключения прямо в списке слева: упало в красное — можно выключить, не заходя в «Настройки».
+$('#conns').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-toggle]');
+  if (!b) return;
+  e.stopPropagation(); // клик по кнопке не открывает настройки
+  b.disabled = true;
+  try {
+    const cfg = await orch.getConfig();
+    const p = cfg.providers.find((x) => x.id === b.dataset.toggle);
+    if (!p) return;
+    p.enabled = !p.enabled;
+    await orch.saveConfig(cfg);
+    state.config = cfg;
+    renderConns();
+    renderForce();
+    toast(p.enabled ? `«${p.label}» включён: будет получать задачи` : `«${p.label}» выключен: задачи ему не отдаются (идущие закончит)`);
+  } catch (err) { toast(err.message ?? String(err), 'error'); }
+  finally { b.disabled = false; }
+}, true);
 
 /** «Все задачи → один провайдер»: the select in the «Запуск» panel and the chip in the top bar. */
 function renderForce() {

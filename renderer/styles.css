@@ -579,3 +579,15 @@ input[type=checkbox], input[type=radio] { accent-color: var(--accent); width: 16
 .freeBtn.on { border-color: var(--ok); color: var(--ok); background: var(--ok-soft); font-weight: 600; }
 .freeBtn.on .freeDotBtn { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
 .connRow.paid { opacity: .55; }
+
+/* ---------- вкл/выкл подключения в списке слева ---------- */
+.connName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.connToggle { flex: none; box-sizing: border-box; width: 34px; height: 18px; min-height: 0; line-height: 0; border-radius: 999px; border: 1px solid var(--line-2); padding: 0; cursor: pointer; position: relative; transition: background .15s, border-color .15s; }
+.connToggle span { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.connToggle.on { background: var(--ok); border-color: var(--ok); }
+.connToggle.on span { transform: translateX(16px); }
+.connToggle.off { background: #0a0a0a; border-color: #3a4352; }
+.connToggle.off span { background: #7d8798; }
+.connToggle:disabled { opacity: .6; cursor: progress; }
+.connRow.disabled .connName { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line-2); }
+.dot.off { background: #0a0a0a; box-shadow: 0 0 0 2px #3a4352; }

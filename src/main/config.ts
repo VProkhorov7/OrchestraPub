@@ -93,9 +93,27 @@ export class ConfigStore {
     }
   }
 
+  /**
+   * Every save keeps the previous file in config-backups/ next to it (the last 30, same permissions: they hold the keys),
+   * so a connection removed or changed by mistake, or by a stale panel, can be brought back.
+   */
   save(cfg: AppConfig): void {
     fs.mkdirSync(path.dirname(this.file), { recursive: true });
     const { health, ...rest } = cfg;
-    fs.writeFileSync(this.file, JSON.stringify(rest, null, 2), { mode: 0o600 });
+    const next = JSON.stringify(rest, null, 2);
+    try {
+      const prev = fs.readFileSync(this.file, 'utf8');
+      if (prev !== next) {
+        const dir = path.join(path.dirname(this.file), 'config-backups');
+        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+        const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+        fs.writeFileSync(path.join(dir, `config-${stamp}-${Math.random().toString(36).slice(2, 5)}.json`), prev, { mode: 0o600 });
+        const all = fs.readdirSync(dir).filter((f) => f.startsWith('config-')).sort();
+        for (const old of all.slice(0, Math.max(0, all.length - 30))) fs.rmSync(path.join(dir, old), { force: true });
+      }
+    } catch {
+      /* no previous file yet: nothing to keep */
+    }
+    fs.writeFileSync(this.file, next, { mode: 0o600 });
   }
 }

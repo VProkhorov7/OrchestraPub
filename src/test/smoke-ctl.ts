@@ -40,4 +40,17 @@ check(!plistCurrent('127.0.0.1', 7788), 'another port: stale');
 fs.writeFileSync(plistPath(), plistText('127.0.0.1', 7777).replace(/(<array><string>[^<]*<\/string><string>)[^<]*(<\/string>)/, '$1/old/place/serve.js$2'));
 check(!plistCurrent('127.0.0.1', 7777), 'the agent pointing at a folder that moved: stale');
 
+// ---- every config save keeps the previous file
+import { ConfigStore } from '../main/config';
+const cs = new ConfigStore(path.join(home, 'cfgtest', 'config.json'));
+const base = cs.load();
+cs.save(base);
+check(!fs.existsSync(path.join(home, 'cfgtest', 'config-backups')), 'the first save has nothing to back up');
+for (let i = 0; i < 35; i++) cs.save({ ...base, runBudgetUsd: i + 100 });
+const bk = fs.readdirSync(path.join(home, 'cfgtest', 'config-backups'));
+check(bk.length === 30, `the last 30 backups are kept: ${bk.length}`);
+check(JSON.parse(fs.readFileSync(path.join(home, 'cfgtest', 'config-backups', bk.sort()[bk.length - 1]), 'utf8')).runBudgetUsd >= 100, 'a backup holds an earlier version');
+cs.save({ ...base, runBudgetUsd: 134 });
+check(fs.readdirSync(path.join(home, 'cfgtest', 'config-backups')).length === 30, 'saving the same content again adds nothing');
+
 console.log('SMOKE-CTL OK');
