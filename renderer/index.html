@@ -205,8 +205,15 @@
   </div>
 
   <div id="alertPanel" class="alertPanel" hidden>
-    <div class="alertHead"><b>Оповещения</b><button id="alertClear" class="link">Очистить</button></div>
+    <div class="alertHead">
+      <span class="alertTabs"><button id="tabAlerts" class="alertTab active">Оповещения</button><button id="tabFeed" class="alertTab">Ход работы</button></span>
+      <button id="alertClear" class="link">Очистить</button>
+    </div>
     <div id="alertList" class="alertList"></div>
+    <div id="feedBox" hidden>
+      <div class="feedMode"><label>Всплывающие сообщения <select id="feedMode"><option value="all">обо всём</option><option value="results">о результатах</option><option value="off">выключены</option></select></label></div>
+      <div id="feedList" class="alertList"></div>
+    </div>
   </div>
 
   <dialog id="projDlg">
@@ -385,5 +392,6 @@
   <script src="renderer.js"></script>
   <script src="overview.js"></script>
   <script src="alerts.js"></script>
+  <script src="activity.js"></script>
 </body>
 </html>

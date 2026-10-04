@@ -16,9 +16,9 @@ function fmtDate(ts) {
 function usd(x) { return '$' + (x ?? 0).toFixed(2); }
 
 // ---------- helpers ----------
-function toast(text, level = 'info') {
+function toast(text, level = 'info', cls = '') {
   const el = document.createElement('div');
-  el.className = `toast ${level}`;
+  el.className = `toast ${level} ${cls}`.trim();
   el.textContent = text;
   $('#toasts').appendChild(el);
   setTimeout(() => el.remove(), level === 'error' ? 9000 : 4000);
@@ -283,6 +283,7 @@ function loadHistorySoon() {
 orch.onEvent((ev) => {
   window.ovEvent?.(ev);
   window.alertEvent?.(ev);
+  window.activityEvent?.(ev);
   if (ev.type === 'toast') {
     if (!ev.runId || ev.runId === state.watch || ev.level === 'error') toast(ev.text, ev.level);
     return;
