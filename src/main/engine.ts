@@ -11,6 +11,7 @@ import { freeOnlyReason } from './freetier';
 import { ProjectMemory } from '../memory/store';
 import { pick } from '../memory/lang';
 import { replyLang } from './lang';
+import { clock, isRateLimitError, pauseProvider, pausedUntil } from './ratelimit';
 import { memoryBriefing } from '../memory/prompt';
 
 export const MAX_DIFF_CHARS_FOR_LLM = 60_000;
@@ -151,7 +152,7 @@ export class TaskEngine {
   providersFor(role: string): ProviderConfig[] {
     return this.cfg.providers.filter((p) => {
       const light = this.cfg.health?.[p.id]?.light;
-      return p.enabled && canWork(p) && light !== 'red' && light !== 'yellow' && !freeOnlyReason(this.cfg, p) && (!p.roles?.length || p.roles.includes(role));
+      return p.enabled && canWork(p) && !pausedUntil(p.id) && light !== 'red' && light !== 'yellow' && !freeOnlyReason(this.cfg, p) && (!p.roles?.length || p.roles.includes(role));
     });
   }
 
@@ -178,6 +179,8 @@ export class TaskEngine {
           .map((x) => x.id);
         throw new Error(`worker "${p.id}" is unavailable (${h.text}). Available instead: ${ok.join(', ') || 'none'}`);
       }
+      const pause = pausedUntil(p.id);
+      if (pause) throw new Error(`provider ${p.id} is rate-limited until ${clock(pause)}, pick another worker`);
       if (input.role && p.roles?.length && !p.roles.includes(input.role)) {
         const ok = this.providersFor(input.role).map((x) => x.id);
         throw new Error(`worker "${p.id}" is not allowed to take role "${input.role}". Workers allowed for it: ${ok.join(', ') || 'none'}`);
@@ -386,7 +389,7 @@ export class TaskEngine {
       if (this.cancelled) this.setStatus(task, 'cancelled');
       else if (task.error) this.setStatus(task, 'failed'); // stopped by a budget cap; diff is kept
       else if (r.timedOut) { task.error = r.error; this.setStatus(task, 'timeout'); }
-      else if (!r.ok) { task.error = r.error; this.setStatus(task, 'failed'); }
+      else if (!r.ok) { task.error = r.error; this.markRateLimit(task); this.setStatus(task, 'failed'); }
       else this.setStatus(task, 'done');
       this.remember(task.status === 'done' ? 'note' : 'error', `${task.id} ${task.title}: воркер ${task.status}${task.error ? ' (' + task.error + ')' : ''}`, [], {
         task: task.id,
@@ -400,6 +403,7 @@ export class TaskEngine {
       if (task.status === 'discarded') return;
       task.error = e?.message ?? String(e);
       task.finishedAt = Date.now();
+      this.markRateLimit(task);
       this.setStatus(task, 'failed');
       this.afterFailure(task);
     } finally {
@@ -423,9 +427,9 @@ export class TaskEngine {
   /** The worker for a retry: one this job has not tried yet, the cheapest first; when all were tried, the cheapest again. */
   private retryProvider(task: WorkerTask): ProviderConfig | null {
     const forced = this.cfg.forceProvider;
-    if (forced) return this.cfg.providers.find((p) => p.id === forced && p.enabled && canWork(p)) ?? null;
+    if (forced) return this.cfg.providers.find((p) => p.id === forced && p.enabled && canWork(p) && !pausedUntil(p.id)) ?? null;
     const tried = new Set(this.state.tasks.filter((x) => x.jobId === task.jobId).map((x) => x.providerId));
-    const pool = (task.role ? this.providersFor(task.role) : this.cfg.providers.filter((x) => x.enabled && canWork(x) && !freeOnlyReason(this.cfg, x))).filter((p) => !this.capReached(p));
+    const pool = (task.role ? this.providersFor(task.role) : this.cfg.providers.filter((x) => x.enabled && canWork(x) && !freeOnlyReason(this.cfg, x))).filter((p) => !this.capReached(p) && !pausedUntil(p.id));
     const fresh = pool.filter((p) => !tried.has(p.id));
     const list = fresh.length ? fresh : pool;
     const price = (p: ProviderConfig) => (p.billing !== 'api' ? 0 : p.priceOut ?? Infinity);
@@ -448,6 +452,7 @@ export class TaskEngine {
   private afterFailure(task: WorkerTask) {
     if (!['failed', 'timeout'].includes(task.status) || this.cancelled || this.budgetExhausted || this.frozen) return;
     if (/превышен лимит|исчерпан бюджет/.test(task.error ?? '')) return; // stopped on purpose by a cap
+    if (task.rateLimited) return this.afterRateLimit(task);
     const max = this.cfg.autoRetry ?? 3;
     const attempt = task.attempt ?? 1;
     const L = this.cfg.language;
@@ -469,6 +474,37 @@ export class TaskEngine {
     task.escalated = true;
     task.question = this.ownerQuestion(task);
     this.note('error', task.question);
+    this.emit({ type: 'task', task });
+    this.pushState();
+  }
+
+  /** A task that stopped on the provider's rate limit pauses that connection (the task itself did nothing wrong). */
+  private markRateLimit(task: WorkerTask) {
+    const text = [task.error ?? '', ...task.log.slice(-5)].join('\n');
+    if (!isRateLimitError(text)) return;
+    task.rateLimited = true;
+    pauseProvider(task.providerId, text);
+  }
+
+  /** Restart on another worker without spending an attempt (continuing from the branch when there is work in it); with none left, wait and say why. */
+  private afterRateLimit(task: WorkerTask) {
+    const L = this.cfg.language;
+    const p = this.retryProvider(task);
+    if (p) {
+      try {
+        this.delegate({ provider: p.id, role: task.role, title: task.title, spec: task.spec, continueFrom: task.diff ? task.id : undefined, retry: { of: task.id, jobId: task.jobId ?? task.id, attempt: task.attempt ?? 1 } });
+        const next = this.state.tasks[this.state.tasks.length - 1];
+        task.retriedAs = next.id;
+        this.note('system', pick(L, `Лимит запросов у ${task.providerId}: ${task.id} переехала на ${next.providerId} (${next.id}), попытка не потрачена`, `Rate limit at ${task.providerId}: ${task.id} moved to ${next.providerId} (${next.id}), no attempt spent`));
+        this.emit({ type: 'task', task });
+        return;
+      } catch {
+        /* the chosen worker cannot take it now: wait below */
+      }
+    }
+    const until = pausedUntil(task.providerId);
+    task.error = pick(L, `подключение ${task.providerId} на паузе до ${clock(until)} (лимит запросов), другого исполнителя нет`, `connection ${task.providerId} is paused until ${clock(until)} (rate limit), no other worker available`);
+    this.note('system', task.error);
     this.emit({ type: 'task', task });
     this.pushState();
   }

@@ -63,6 +63,7 @@ if(argv.includes('json')) { // planning: --output-format json
   const plan={summary:'план по подписке',tasks:[{id:'p1',title:'Правка hello',role:'docs',providerId:'deepseek',spec:'Change hello.txt',dependsOn:[],reason:'дёшево'}]};
   out({type:'result',is_error:false,result:'Вот план:\\n\\\`\\\`\\\`json\\n'+JSON.stringify(plan)+'\\n\\\`\\\`\\\`'}); process.exit(0); }
 if(process.env.FAKE_FAIL_ALL||(process.env.FAKE_FAIL_URL&&(process.env.ANTHROPIC_BASE_URL||'').includes(process.env.FAKE_FAIL_URL))){ out({type:'result',is_error:true,result:'simulated worker failure'}); process.exit(1); }
+if(process.env.FAKE_RATE_LIMIT_URL&&(process.env.ANTHROPIC_BASE_URL||'').includes(process.env.FAKE_RATE_LIMIT_URL)){ out({type:'result',is_error:true,result:process.env.FAKE_RATE_LIMIT_TEXT||'API Error: 429 Too Many Requests'}); process.exit(1); }
 const file=process.env.FAKE_FILE||'hello.txt';
 out({type:'system',subtype:'init',model:process.env.ANTHROPIC_MODEL});
 const usage={input_tokens:100000,output_tokens:10000,cache_read_input_tokens:0,cache_creation_input_tokens:0};

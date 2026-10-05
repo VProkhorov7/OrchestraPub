@@ -92,6 +92,10 @@ Each worker has **role switches** in Settings (Новая функциональ
 
 **Распределить автоматически** makes one planning call to Claude: it reads the goal (plus anything attached with «Прикрепить задание») and the file tree, and returns a plan — tasks with role, worker, brief, dependencies and a one-line reason. The plan opens in the «План» tab where you can retitle tasks, change the role or worker, edit the brief or drop a task. «Запустить по плану» starts the orchestrator with that plan as a strong recommendation; it may still split, reassign after failures or add fix tasks, and says why when it does. «Запустить» without a plan works as before: Claude decides on the fly.
 
+## Provider rate limits
+
+A 429 / quota / «free-models-per-day» answer is a pause of that connection, not a task failure (`src/main/ratelimit.ts`). The connection is paused in memory (until midnight UTC for a daily limit, otherwise 10 minutes; a service restart forgets it). The task restarts on another worker without spending an automatic-retry attempt, continuing from its branch if it already has commits. With no other worker it stays failed with the reason «paused until HH:MM UTC» and the owner gets one warn alert (`ratelimit:<id>`). Paused connections are skipped by retries and refused by `delegate`; `list_workers` marks them PAUSED.
+
 ## Run history and resume
 
 Every run is saved to `<userData>/runs/<runId>/run.json` as it goes: tasks, logs, diffs, spend and the orchestrator's whole conversation. The **История** tab lists runs; «Открыть» shows a saved run read-only, «Продолжить» resumes one that was interrupted, failed, cancelled or stopped by the budget.

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import { Alerts } from './alerts';
 import { pick } from '../memory/lang';
+import { clock, pausedUntil } from './ratelimit';
 import type { TaskEngine } from './engine';
 import type { AppConfig, Light } from './types';
 import type { HubEvent } from './hub';
@@ -184,7 +185,19 @@ export class Watchdog {
       this.taskStatus.set(k, ev.task.status);
       const retries = cfg.autoRetry ?? 3;
       const willRetry = retries > 0 && (ev.task.attempt ?? 1) <= retries && !/превышен лимит|исчерпан бюджет/.test(ev.task.error ?? '');
-      if (ev.task.escalated && !this.alerts.isActive(`ask:${ev.task.jobId ?? k}`)) {
+      if (ev.task.rateLimited && prev !== ev.task.status && ev.task.status === 'failed') {
+        const until = pausedUntil(ev.task.providerId);
+        this.alerts.raise(
+          {
+            key: `ratelimit:${ev.task.providerId}`,
+            level: 'warn',
+            runId: ev.runId,
+            title: pick(L, `Подключение ${ev.task.providerId}: лимит запросов, пауза до ${clock(until)}`, `Connection ${ev.task.providerId}: rate limit, paused until ${clock(until)}`),
+            text: ev.task.title,
+          },
+          Math.max(until - this.now(), 60_000),
+        );
+      } else if (ev.task.escalated && !this.alerts.isActive(`ask:${ev.task.jobId ?? k}`)) {
         this.alerts.raise({
           key: `ask:${ev.task.jobId ?? k}`,
           level: 'error',

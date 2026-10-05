@@ -222,6 +222,8 @@ export interface WorkerTask {
   retriedAs?: string;
   /** All automatic retries failed: the owner has to decide. `question` is what they are asked. */
   escalated?: boolean;
+  /** The task stopped on the provider's rate limit: the connection is paused, the task is not a failure. */
+  rateLimited?: boolean;
   question?: string;
   title: string;
   providerId: string;
