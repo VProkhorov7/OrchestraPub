@@ -59,6 +59,7 @@
     doctorProjects: (projects, roots) => post('/api/doctor/projects', { projects, roots }),
     doctorDiscover: (roots) => post('/api/doctor/discover', { roots }),
     tariff: () => get('/api/tariff'),
+    attention: () => get('/api/attention'),
     report: (days) => get('/api/report?days=' + enc(days)),
     ledger: () => get('/api/ledger'),
     ledgerSnapshot: (id, balance, unitUsd) => post('/api/ledger', { id, balance, unitUsd }),

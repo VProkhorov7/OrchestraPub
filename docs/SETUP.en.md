@@ -236,6 +236,8 @@ A separate watchdog, `orchestra-ctl watch`, is run by launchd once a minute, ind
 
 **Where alerts show up.** A bell in the panel header with a counter of unread alerts and a list; a pop-up message; a macOS notification (errors only by default); optionally a request to a `webhook` address (works with ntfy.sh). The list is kept in `alerts.json` next to the settings, so a problem that happened while you were away is not lost.
 
+**«Требует вас» (needs you).** A block at the top of the panel lists everything that waits for you in one place: a worker's question, a task out of automatic retries, done but not merged, a task stopped by the cost cap, connections paused or with a red/yellow light, budget and spend caps at 90% or more. Each line says what happened and what to do. When nothing waits, the block is hidden.
+
 **Automatic retry.** A task that failed or timed out is restarted on another suitable worker (the cheapest one not tried yet), up to three times. The run journal shows «Auto-retry 1/3», and the orchestrator does not delegate such a task again but waits for the new one. If three retries do not help, Orchestra stops the task and the orchestrator asks you a question: what happened, what was tried and what to do next (retry on a worker you name, rewrite the brief, do it yourself, put it off). Stops caused by a cap or a budget are not retried.
 
 Settings in `config.json`: `autoRetry` (the number of retries, 3 by default, 0 turns it off) and `notify`: `macos` (true/false), `macosLevel` (`warn` or `error`), `silentMinutes` (8 by default), `taskCostWarnUsd` (1 by default, 0 turns it off), `unmergedWarnMinutes` (60 by default, 0 turns it off), `webhook` (an address or empty).

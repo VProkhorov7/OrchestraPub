@@ -291,6 +291,8 @@ export async function serve(opts: ServeOptions = {}) {
         return json(res, 200, await hub.localPrepare(String((await body(req)).id ?? '')));
       case 'GET /alerts':
         return json(res, 200, hub.alerts.list());
+      case 'GET /attention':
+        return json(res, 200, hub.attention());
       case 'POST /alerts/clear':
         hub.alerts.clearAll();
         return json(res, 200, { ok: true });

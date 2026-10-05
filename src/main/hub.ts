@@ -47,6 +47,8 @@ import { Alerts } from './alerts';
 import { freeOnlyReason, refreshFreeModels } from './freetier';
 import { listLocalModels, prepareOllamaContext } from './localmodels';
 import { Watchdog } from './watchdog';
+import { collectAttention } from './attention';
+import { pausedUntil } from './ratelimit';
 import { AppConfig, Health, OrchEvent, Plan, PlannerChoice, ROLES, RunState, Triage } from './types';
 import { ensureMemory } from '../memory/setup';
 import { execFile } from 'child_process';
@@ -120,6 +122,26 @@ export class Hub {
   liveEngines() {
     const apps = [...this.controllers.values()].filter((c) => c.state.status === 'running').map((c) => c.engine);
     return [...apps, ...[...this.mcp.values()].map((m) => m.engine)];
+  }
+
+  /** «Требует вас»: what waits for the owner, from the runs held in memory (see attention.ts). */
+  attention() {
+    const cfg = this.config();
+    const engines = new Map<string, TaskEngine>();
+    for (const c of this.controllers.values()) engines.set(c.state.runId, c.engine);
+    for (const m of this.mcp.values()) engines.set(m.engine.state.runId, m.engine);
+    const now = Date.now();
+    return collectAttention({
+      runs: [...engines.values()].map((e) => {
+        const s = e.spent();
+        return { runId: e.state.runId, tasks: e.state.tasks, budgetUsd: e.budget(), spentTotal: s.total, spentByProvider: s.byProvider };
+      }),
+      providers: cfg.providers,
+      health: this.health,
+      pausedUntil: Object.fromEntries(cfg.providers.map((p) => [p.id, pausedUntil(p.id, now)])),
+      unmergedWarnMinutes: cfg.notify?.unmergedWarnMinutes ?? 60,
+      now,
+    });
   }
 
   get worktreeRoot() {
