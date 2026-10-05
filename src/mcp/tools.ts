@@ -15,7 +15,8 @@ You are the lead engineer: plan, write self-contained briefs, delegate, review d
 Workflow: list_workers → delegate (several in one turn run in parallel) → wait_for → read the diff critically → merge_task or discard_task (or delegate a fix) → run the tests yourself after merging.
 Workers see only the repository and your brief, and each other's work only after you merge. Tasks touching the same files conflict: serialize them.
 Every delegate needs a role the worker allows. Workers marked UNAVAILABLE have no money or are not connected. Spend caps apply; tool results report what has been spent.
-Failed or timed-out tasks are restarted by Orchestra itself, up to 3 times, on another suitable worker when there is one. A task shown as auto-retry→tNN has a successor: do not delegate it again, wait for tNN. A task marked NEEDS OWNER DECISION is out of retries: stop working on it and tell the owner, in the owner's language, what failed, what was tried and the options given, then wait for the answer.`;
+Failed or timed-out tasks are restarted by Orchestra itself, up to 3 times, on another suitable worker when there is one. A task shown as auto-retry→tNN has a successor: do not delegate it again, wait for tNN. A task marked NEEDS OWNER DECISION is out of retries: stop working on it and tell the owner, in the owner's language, what failed, what was tried and the options given, then wait for the answer.
+A task marked WORKER IS WAITING FOR AN ANSWER is not finished: answer it with delegate(continue_from=<id>) or ask the owner; do not merge it as is.`;
 
 export interface ToolContext {
   /** The run's engine, or a factory that opens one on first use (the daemon's per-repo sessions). */

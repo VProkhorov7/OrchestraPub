@@ -4,7 +4,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { busyRuns, plistCurrent, servePort } from '../server/ctl';
+import { busyRuns, plistCurrent, servePort, waitIdle } from '../server/ctl';
 import { plistText, plistPath } from '../main/service';
 import { tmpdir, check } from './helpers';
 
@@ -53,4 +53,20 @@ check(JSON.parse(fs.readFileSync(path.join(home, 'cfgtest', 'config-backups', bk
 cs.save({ ...base, runBudgetUsd: 134 });
 check(fs.readdirSync(path.join(home, 'cfgtest', 'config-backups')).length === 30, 'saving the same content again adds nothing');
 
-console.log('SMOKE-CTL OK');
+(async () => {
+  const wh = tmpdir('orch-wait-');
+  const wrun = (state: object) => {
+    fs.mkdirSync(path.join(wh, 'runs', 'w'), { recursive: true });
+    fs.writeFileSync(path.join(wh, 'runs', 'w', 'run.json'), JSON.stringify({ version: 1, state: { runId: 'w', repo: '/r', source: 'app', ...state } }));
+  };
+  wrun({ status: 'done' });
+  const t0 = Date.now();
+  check((await waitIdle(wh, { timeoutMs: 400, pollMs: 50 })) === true && Date.now() - t0 < 40, 'waitIdle: free at once returns true without waiting');
+  wrun({ status: 'running' });
+  setTimeout(() => wrun({ status: 'done' }), 300);
+  let waited = 0;
+  check((await waitIdle(wh, { timeoutMs: 2000, pollMs: 50, onWait: () => waited++ })) === true && waited > 0, 'waitIdle: returns true once the run finishes');
+  wrun({ status: 'running' });
+  check((await waitIdle(wh, { timeoutMs: 400, pollMs: 50 })) === false, 'waitIdle: still busy at the timeout returns false');
+  console.log('SMOKE-CTL OK');
+})();

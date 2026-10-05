@@ -215,6 +215,10 @@ export interface WorkerTask {
   /** Last sign of life from the worker (a log line or usage): a silent cost counter alone is no sign of a hang. */
   lastActivityAt?: number;
   retryOf?: string;
+  /** The worker stopped on a question (see waiting.ts); the status stays 'done', the work is partial. */
+  needsAnswer?: string;
+  /** true: it wrote the NEEDS_ANSWER marker; false: guessed from its last log line. */
+  needsAnswerExplicit?: boolean;
   /** Stopped because it reached a spend cap: the partial result is kept and can be continued (delegate with continue_from). */
   capped?: boolean;
   /** This task goes on from the branch of an earlier one. */

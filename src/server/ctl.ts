@@ -3,7 +3,7 @@
  * Control of the background service for the desktop launcher (scripts/desktop/Orchestra.command):
  *
  *   orchestra-ctl up        make sure the service runs under launchd and answers; print the panel address
- *   orchestra-ctl restart   the same after a restart, but refuse while workers are busy (--force overrides)
+ *   orchestra-ctl restart   the same after a restart, but refuse while workers are busy (--force overrides, --when-idle waits)
  *   orchestra-ctl stop      stop the service and keep it from starting at login
  *   orchestra-ctl status    what runs, where, and whether any run is busy
  *   orchestra-ctl url       the panel address with the token
@@ -49,6 +49,18 @@ export function busyRuns(home: string): Busy[] {
     }
   }
   return out;
+}
+
+/** Polls until no run is busy: true when free, false when timeoutMs passed first. */
+export async function waitIdle(home: string, opts: { timeoutMs: number; pollMs: number; onWait?: (busy: Busy[]) => void }): Promise<boolean> {
+  const end = Date.now() + opts.timeoutMs;
+  for (;;) {
+    const busy = busyRuns(home);
+    if (!busy.length) return true;
+    if (Date.now() >= end) return false;
+    opts.onWait?.(busy);
+    await new Promise((r) => setTimeout(r, Math.min(opts.pollMs, Math.max(0, end - Date.now()))));
+  }
 }
 
 export function servePort(home: string): { host: string; port: number } {
@@ -250,6 +262,24 @@ async function main(): Promise<number> {
       return bringUp(home, false);
     case 'restart': {
       const busy = busyRuns(home);
+      if (busy.length && !force && process.argv.includes('--when-idle')) {
+        const arg = process.argv.find((a) => a.startsWith('--timeout-min='));
+        const min = arg ? Number(arg.slice('--timeout-min='.length)) : 120;
+        const end = Date.now() + min * 60000;
+        let lastSaid = 0;
+        const free = await waitIdle(home, {
+          timeoutMs: min * 60000,
+          pollMs: 10000,
+          onWait: (b) => {
+            if (Date.now() - lastSaid < 60000) return;
+            lastSaid = Date.now();
+            console.log(`Жду, пока освободится служба: ${b.map((x) => x.runId).join(', ')} (осталось ждать не более ${Math.ceil((end - Date.now()) / 60000)} мин)`);
+          },
+        });
+        if (free) return bringUp(home, true);
+        console.error(`Не дождался: служба занята дольше ${min} мин. Служба не перезапущена.`);
+        return 3;
+      }
       if (busy.length && !force) {
         console.error('Не перезапускаю: сейчас идут задачи воркеров (перезапуск оборвёт их и запуск):');
         for (const b of busy) console.error(`  ${b.runId}  ${b.repo}  ${b.tasks.join(', ') || 'идёт запуск'}`);
@@ -276,7 +306,7 @@ async function main(): Promise<number> {
       console.log(`URL ${panelUrl(host, port, loadToken(home))}`);
       return 0;
     default:
-      console.error('orchestra-ctl up | restart [--force] | stop | status | url | watch');
+      console.error('orchestra-ctl up | restart [--force | --when-idle [--timeout-min=N]] | stop | status | url | watch');
       return 1;
   }
 }

@@ -12,6 +12,7 @@ import { ProjectMemory } from '../memory/store';
 import { pick } from '../memory/lang';
 import { replyLang } from './lang';
 import { clock, isRateLimitError, pauseProvider, pausedUntil } from './ratelimit';
+import { findQuestion } from './waiting';
 import { memoryBriefing } from '../memory/prompt';
 
 export const MAX_DIFF_CHARS_FOR_LLM = 60_000;
@@ -390,7 +391,11 @@ export class TaskEngine {
       else if (task.error) this.setStatus(task, 'failed'); // stopped by a budget cap; diff is kept
       else if (r.timedOut) { task.error = r.error; this.setStatus(task, 'timeout'); }
       else if (!r.ok) { task.error = r.error; this.markRateLimit(task); this.setStatus(task, 'failed'); }
-      else this.setStatus(task, 'done');
+      else {
+        const q = findQuestion(task.result ?? '', task.log[task.log.length - 1] ?? '');
+        if (q) { task.needsAnswer = q.question; task.needsAnswerExplicit = q.explicit; }
+        this.setStatus(task, 'done');
+      }
       this.remember(task.status === 'done' ? 'note' : 'error', `${task.id} ${task.title}: воркер ${task.status}${task.error ? ' (' + task.error + ')' : ''}`, [], {
         task: task.id,
         diffStat: task.diffStat,
@@ -552,8 +557,13 @@ export class TaskEngine {
     const ask = t.escalated
       ? `\nNEEDS OWNER DECISION: automatic retries are used up. Do not delegate this task again. Tell the owner this, in ${replyLang(this.cfg)}, and ask what to do:\n${t.question ?? ''}`
       : '';
+    const waiting = t.needsAnswer
+      ? t.needsAnswerExplicit
+        ? `\nWORKER IS WAITING FOR AN ANSWER: ${t.needsAnswer}. Its work is partial. Do not merge it as finished. Answer it yourself if you can: delegate again with continue_from="${t.id}" and the answer in the spec; if it needs the owner's decision, ask the owner (in ${replyLang(this.cfg)}), then continue the same way.`
+        : `\nThe worker's last words look like a question: check the summary before merging. (${t.needsAnswer.slice(0, 120)})`
+      : '';
     const alive = t.status === 'running' && t.lastActivityAt ? ` (last activity ${Math.round((Date.now() - t.lastActivityAt) / 1000)}s ago: ${(t.log[t.log.length - 1] ?? '').slice(0, 80)}; the cost shown is a live estimate, the provider may report real usage only at the end)` : '';
-    return `task ${t.id} "${t.title}" [${t.role ?? '-'} · ${t.providerId}/${t.model}] status=${t.status}${attempt}${retry}${t.error ? ' error=' + t.error : ''}${cost}${alive}${capped}${ask}`;
+    return `task ${t.id} "${t.title}" [${t.role ?? '-'} · ${t.providerId}/${t.model}] status=${t.status}${attempt}${retry}${t.error ? ' error=' + t.error : ''}${cost}${alive}${capped}${ask}${waiting}`;
   }
 
   describeTask(t: WorkerTask): string {

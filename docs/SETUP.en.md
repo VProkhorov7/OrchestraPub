@@ -232,7 +232,7 @@ A worker can be a model that runs on your computer or on a neighbouring one: fre
 - a connection turned red or yellow (and when it works again);
 - a run failed, was stopped by the budget or was interrupted.
 
-A separate watchdog, `orchestra-ctl watch`, is run by launchd once a minute, independently of the service. If the service fails to answer twice in a row, it restarts the service and tells you. It does not bring the service back after `Orchestra-stop.command`. It also warns when statistics collection has stopped.
+A separate watchdog, `orchestra-ctl watch`, is run by launchd once a minute, independently of the service. If the service fails to answer twice in a row, it restarts the service and tells you. It does not bring the service back after `Orchestra-stop.command`. It also warns when statistics collection has stopped. `orchestra-ctl restart` does not restart the service while worker tasks are running; `--force` restarts at once, while `--when-idle` waits until the service is free (up to 120 minutes by default, set with `--timeout-min=N`) and then restarts; if the wait runs out it does not restart and exits with code 3.
 
 **Where alerts show up.** A bell in the panel header with a counter of unread alerts and a list; a pop-up message; a macOS notification (errors only by default); optionally a request to a `webhook` address (works with ntfy.sh). The list is kept in `alerts.json` next to the settings, so a problem that happened while you were away is not lost.
 

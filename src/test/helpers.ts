@@ -73,7 +73,7 @@ out({type:'assistant',message:{id:'m1',usage:mu,content:[{type:'tool_use',name:'
 if(process.env.FAKE_SLOW_MS) cp.execSync('sleep '+(Number(process.env.FAKE_SLOW_MS)/1000));
 fs.writeFileSync(file,'hello from '+process.env.ANTHROPIC_MODEL+' via '+process.env.ANTHROPIC_BASE_URL+'\\n');
 cp.execSync('git add -A && git -c user.name=w -c user.email=w@w commit -q -m worker');
-out({type:'result',result:'Changed '+file+' as asked. Verified by reading it back.',total_cost_usd:9.99,usage});
+out({type:'result',result:'Changed '+file+' as asked. Verified by reading it back.'+(process.env.FAKE_NEEDS_ANSWER?'\\nNEEDS_ANSWER: which port?':''),total_cost_usd:9.99,usage});
 `,
   );
   fs.chmodSync(f, 0o755);

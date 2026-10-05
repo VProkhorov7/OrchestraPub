@@ -25,8 +25,6 @@ const SILENT_DEFAULT_MIN = 8;
 const TASK_COST_WARN_USD = 1;
 /** A done task not merged or discarded for this long is worth a look (cfg.notify.unmergedWarnMinutes). */
 const UNMERGED_WARN_MIN = 60;
-/** The worker's last words are a question or a request for permission: it stopped and waits for a human. */
-const WAITING = /\?\s*$|нужн\w+ (ваш|разрешени)|жду (ваш|разрешени|ответ|ok)|\bneed your\b|\bpermission\b|\bapprove\b|\bconfirm\b|разрешени/i;
 
 export class Watchdog {
   private act = new Map<string, { sig: string; at: number }>();
@@ -205,13 +203,13 @@ export class Watchdog {
           title: pick(L, `Нужно ваше решение: «${ev.task.title}» не выполняется`, `Your decision is needed: «${ev.task.title}» does not work`),
           text: ev.task.question ?? '',
         });
-      } else if (prev !== ev.task.status && ev.task.status === 'done' && WAITING.test((ev.task.log[ev.task.log.length - 1] ?? '').trim())) {
+      } else if (prev !== ev.task.status && ev.task.status === 'done' && ev.task.needsAnswer) {
         this.alerts.raise({
           key: `waiting:${k}`,
-          level: 'error',
+          level: ev.task.needsAnswerExplicit ? 'error' : 'warn',
           runId: ev.runId,
           title: pick(L, `Воркер ${ev.task.id} (${ev.task.providerId}) остановился и ждёт ответа`, `Worker ${ev.task.id} (${ev.task.providerId}) stopped and is waiting for an answer`),
-          text: `${ev.task.title}. ` + (ev.task.log[ev.task.log.length - 1] ?? '').slice(0, 300),
+          text: `${ev.task.title}. ` + ev.task.needsAnswer.slice(0, 300),
         });
       } else if (prev !== ev.task.status && (ev.task.status === 'failed' || ev.task.status === 'timeout')) {
         this.alerts.raise({
