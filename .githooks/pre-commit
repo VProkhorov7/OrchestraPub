@@ -1,0 +1,10 @@
+#!/bin/sh
+# orchestra-memory: память проекта и wiki уходят в git вместе с каждым коммитом.
+# Сначала выполняется прежний хук из .git/hooks, если он был.
+HOOKS_DIR="$(git rev-parse --git-common-dir)/hooks"
+if [ -x "$HOOKS_DIR/pre-commit" ]; then "$HOOKS_DIR/pre-commit" "$@" || exit $?; fi
+[ -n "$ORCHESTRA_MEMORY_OFF" ] && exit 0
+# Приложения, запущенные из Dock (Orca, GUI-клиенты git), получают урезанный PATH.
+PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:$HOME/.npm-global/bin:$HOME/.local/bin"
+command -v orchestra-memory >/dev/null 2>&1 || exit 0
+exec orchestra-memory hook pre-commit "$@"

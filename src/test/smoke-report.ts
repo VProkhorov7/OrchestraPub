@@ -1,7 +1,7 @@
 /** Spend report and balance reconciliation: aggregates, waste, top-ups, unit conversion. */
 import * as path from 'path';
 import { tmpdir, check } from './helpers';
-import { buildReport } from '../main/report';
+import { buildReport, formatTrackRecord } from '../main/report';
 import { addSnapshot, readLedger, reconcile } from '../main/ledger';
 import type { RunState } from '../main/types';
 
@@ -27,6 +27,14 @@ check(Math.abs(rep.wasteUsd - 2) < 1e-9 && Math.abs(rep.wasteShare - 0.5) < 1e-9
 check(Math.abs((rep.usdPerMerged ?? 0) - 2) < 1e-9, 'dollars per merged task');
 check(rep.byProvider[0].id === 'deepseek' && Math.abs(rep.byProvider[0].cacheShare - 0.8) < 1e-9, 'providers sorted by spend, cache share');
 check(rep.top[0].taskId === 't2', 'most expensive task first');
+
+const tr = formatTrackRecord(rep);
+check(/deepseek: 2 tasks, 1 merged, \$3\.00 spent, \$2\.00 wasted, \$3\.00 per merged task \(little data\)/.test(tr), `track record shows cost per merged task (got ${tr})`);
+check(/glm: 1 tasks, 1 merged, \$0\.50 spent, \$0\.00 wasted, \$0\.50 per merged task/.test(tr), 'each worker has its own line');
+check(/x: 1 tasks, 0 merged, .*no merged tasks \(little data\)/.test(formatTrackRecord({ days: 7, byProvider: [{ id: 'x', usd: 1, tasks: 1, merged: 0, wasteUsd: 1 }] } as any)), 'no merged tasks is stated');
+check(tr.startsWith('Track record, last 3 days:') && tr.includes('Prefer workers with the lowest'), 'header and hint');
+check(!/little data/.test(formatTrackRecord({ days: 7, byProvider: [{ id: 'x', usd: 3, tasks: 3, merged: 1, wasteUsd: 0 }] } as any)), 'three tasks is enough data');
+check(formatTrackRecord(buildReport([], 7, NOW)) === '', 'empty report: empty string');
 
 const dir = tmpdir('ledger');
 const file = path.join(dir, 'ledger.json');

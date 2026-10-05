@@ -74,6 +74,8 @@ export interface AppConfig {
     silentMinutes?: number;
     /** Warn when one running task has cost this many dollars (default 1; 0 = off). */
     taskCostWarnUsd?: number;
+    /** Warn when a run has a done task not merged or discarded for this many minutes (default 60; 0 = off). */
+    unmergedWarnMinutes?: number;
     /** Optional URL that receives every alert as a plain-text POST (works with ntfy.sh and similar). */
     webhook?: string;
   };

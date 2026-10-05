@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "project": "Orchestra",
+  "wikiDir": "docs",
+  "journal": "docs/JOURNAL.md",
+  "changelog": "CHANGELOG.md",
+  "sessionMinutes": 35,
+  "requireWiki": false,
+  "prodGuard": {
+    "enabled": true,
+    "pushDeploys": false,
+    "minutes": 20,
+    "extra": []
+  }
+}

@@ -75,7 +75,7 @@ function ensureRepo(): Promise<void> {
 }
 
 const server = new McpServer({ name: 'orchestra', version: '0.7.5' }, { instructions: ORCHESTRA_INSTRUCTIONS(repo) });
-registerOrchestraTools(server, { engine, repo, ready: ensureRepo });
+registerOrchestraTools(server, { engine, repo, home, ready: ensureRepo });
 registerMemoryTools(server, repo, process.env.ORCHESTRA_AUTHOR || 'mcp-agent', () => cfg);
 
 function shutdown(code = 0) {

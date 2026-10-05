@@ -10,7 +10,8 @@ import type { HubEvent } from './hub';
  * What they report (as alerts, see alerts.ts):
  *   a worker that shows no activity for a while · a working task whose folder (worktree) has disappeared ·
  *   a run close to or at its budget, a worker close to or at its spend cap · a task that failed or timed out ·
- *   a connection that turned red or yellow (and when it recovers) · a run that failed, stopped or was interrupted.
+ *   a connection that turned red or yellow (and when it recovers) · a run that failed, stopped or was interrupted ·
+ *   a run with tasks done but not merged or discarded for a while.
  * The external watchdog (orchestra-ctl watch) covers what this one cannot: the service itself not answering.
  */
 
@@ -21,6 +22,8 @@ export interface WatchHost {
 const SILENT_DEFAULT_MIN = 8;
 /** One task that has already cost this much while still running is worth a look (cfg.notify.taskCostWarnUsd). */
 const TASK_COST_WARN_USD = 1;
+/** A done task not merged or discarded for this long is worth a look (cfg.notify.unmergedWarnMinutes). */
+const UNMERGED_WARN_MIN = 60;
 /** The worker's last words are a question or a request for permission: it stopped and waits for a human. */
 const WAITING = /\?\s*$|нужн\w+ (ваш|разрешени)|жду (ваш|разрешени|ответ|ok)|\bneed your\b|\bpermission\b|\bapprove\b|\bconfirm\b|разрешени/i;
 
@@ -113,8 +116,34 @@ export class Watchdog {
         }
       }
       this.checkBudgets(e, L);
+      this.checkUnmerged(e, L, cfg, t);
     }
     for (const k of [...this.act.keys()]) if (!seen.has(k)) this.act.delete(k);
+  }
+
+  private checkUnmerged(e: TaskEngine, L: AppConfig['language'], cfg: AppConfig, t: number) {
+    const warnMin = cfg.notify?.unmergedWarnMinutes ?? UNMERGED_WARN_MIN;
+    const key = `unmerged:${e.state.runId}`;
+    if (warnMin <= 0) return;
+    const stale = e.state.tasks.filter((task) => task.status === 'done' && task.finishedAt && t - task.finishedAt > warnMin * 60_000);
+    if (stale.length === 0) {
+      if (this.alerts.isActive(key)) this.alerts.clear(key);
+      return;
+    }
+    const list = stale
+      .slice(0, 5)
+      .map((task) => `${task.title} (${task.id}, ${task.providerId})`)
+      .join('; ');
+    this.alerts.raise(
+      {
+        key,
+        level: 'warn',
+        runId: e.state.runId,
+        title: pick(L, `${stale.length} задач ждут ревью/слияния`, `${stale.length} tasks wait for review/merge`),
+        text: `${list}. ` + pick(L, 'Слейте (merge) или отбросьте (discard).', 'Merge or discard them.'),
+      },
+      6 * 60 * 60_000,
+    );
   }
 
   private checkBudgets(e: TaskEngine, L: AppConfig['language']) {

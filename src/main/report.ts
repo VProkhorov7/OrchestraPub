@@ -45,6 +45,19 @@ const dayKey = (t: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+/** "Track record" block for list_workers: one line per worker with tasks in the period, or '' when there are none. */
+export function formatTrackRecord(report: Report): string {
+  const usd = (n: number) => `$${n.toFixed(2)}`;
+  const lines = report.byProvider
+    .filter((p) => p.tasks > 0)
+    .map((p) => {
+      const per = p.merged > 0 ? `${usd(p.usd / p.merged)} per merged task` : 'no merged tasks';
+      return `${p.id}: ${p.tasks} tasks, ${p.merged} merged, ${usd(p.usd)} spent, ${usd(p.wasteUsd)} wasted, ${per}${p.tasks < 3 ? ' (little data)' : ''}`;
+    });
+  if (!lines.length) return '';
+  return `Track record, last ${report.days} days:\n${lines.join('\n')}\nPrefer workers with the lowest $ per merged task for the same role; avoid ones with high waste unless the task needs them.`;
+}
+
 export function loadStates(runsDir: string): RunState[] {
   const out: RunState[] = [];
   let names: string[] = [];

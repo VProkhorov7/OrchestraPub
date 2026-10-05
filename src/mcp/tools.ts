@@ -1,6 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { TaskEngine, isTerminal } from '../main/engine';
+import * as path from 'path';
+import { buildReport, formatTrackRecord, loadStates } from '../main/report';
 import { describeRoles, describeWorkers } from '../main/planner';
 import { AppConfig, ROLES } from '../main/types';
 import { ProjectMemory, checkManualLog } from '../memory/store';
@@ -19,6 +21,8 @@ export interface ToolContext {
   /** The run's engine, or a factory that opens one on first use (the daemon's per-repo sessions). */
   engine: TaskEngine | (() => Promise<TaskEngine>);
   repo: string;
+  /** Orchestra home (runs are read from <home>/runs for the track record); without it the block is skipped. */
+  home?: string;
   /** Called before every tool (e.g. to validate the repo lazily). */
   ready?: () => Promise<void>;
   /** Default wait_for timeout, seconds. */
@@ -51,7 +55,13 @@ export function registerOrchestraTools(server: McpServer, ctx: ToolContext): voi
   tool(
     'list_workers',
     { description: 'Workers you can delegate to (id, model, billing, allowed roles, notes, availability), roles, and spend so far.', inputSchema: {} },
-    guard(() => `Roles:\n${describeRoles()}\n\nWorkers:\n${describeWorkers(engine.cfg)}\n\nRepository: ${ctx.repo} (branch ${engine.state.baseBranch})\n${engine.spendReport()}`),
+    guard(() => {
+      let track = '';
+      try {
+        if (ctx.home) track = formatTrackRecord(buildReport(loadStates(path.join(ctx.home, 'runs')), 7));
+      } catch {}
+      return `Roles:\n${describeRoles()}\n\nWorkers:\n${describeWorkers(engine.cfg)}\n\n${track ? track + '\n\n' : ''}Repository: ${ctx.repo} (branch ${engine.state.baseBranch})\n${engine.spendReport()}`;
+    }),
   );
 
   tool(

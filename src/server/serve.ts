@@ -178,7 +178,7 @@ export async function serve(opts: ServeOptions = {}) {
       },
     );
     if (repo) {
-      registerOrchestraTools(server, { engine: () => hub.mcpSession(repo), repo, waitSec: 240 });
+      registerOrchestraTools(server, { engine: () => hub.mcpSession(repo), repo, home: hub.home, waitSec: 240 });
       registerMemoryTools(server, repo, 'mcp-agent', () => ({ ...hub.config(), health: hub.health }));
     }
     registerAutopilot(server, hub, repo);

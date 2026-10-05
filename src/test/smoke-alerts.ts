@@ -105,6 +105,37 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   wd.onEvent({ type: 'state', runId: 'r9', state: { status: 'interrupted', goal: 'x', stopReason: '' } } as any);
   check(emitted2.some((a) => /Run r9: interrupted/.test(a.title)), 'an interrupted run is reported');
 
+  // ---- done but not merged
+  const engU: any = mk();
+  const u1: any = { id: 'u1', title: 'add tests', providerId: 'glm', status: 'done', log: [], finishedAt: 0, worktree: wt };
+  const u2: any = { id: 'u2', title: 'fix bug', providerId: 'glm', status: 'done', log: [], finishedAt: 0, worktree: wt };
+  engU.state.runId = 'ru';
+  engU.state.tasks.push(u1, u2);
+  let nowU = 10_000_000;
+  const emittedU: Alert[] = [];
+  const aU = new Alerts(path.join(tmp, 'alerts3.json'), () => cfg, (a) => emittedU.push(a), () => nowU);
+  let cfgU: any = { ...cfg };
+  const wdU = new Watchdog({ liveEngines: () => [engU] }, aU, () => cfgU, () => nowU);
+  u1.finishedAt = nowU;
+  u2.finishedAt = nowU;
+  wdU.tick();
+  check(!emittedU.some((a) => /wait for review\/merge/.test(a.title)), 'freshly done tasks are not reported yet');
+  nowU += 61 * 60_000;
+  wdU.tick();
+  check(emittedU.some((a) => /2 tasks wait for review\/merge/.test(a.title)), `two stale done tasks are reported together: ${emittedU.map((a) => a.title)}`);
+  u1.status = 'merged';
+  u2.status = 'merged';
+  wdU.tick();
+  check(!aU.isActive('unmerged:ru'), 'merging all stale tasks clears the alert');
+
+  const emittedU2: Alert[] = [];
+  const aU2 = new Alerts(path.join(tmp, 'alerts4.json'), () => cfg, (a) => emittedU2.push(a), () => nowU);
+  cfgU = { ...cfg, notify: { ...cfg.notify, unmergedWarnMinutes: 0 } };
+  u1.status = 'done';
+  const wdU2 = new Watchdog({ liveEngines: () => [engU] }, aU2, () => cfgU, () => nowU);
+  wdU2.tick();
+  check(!emittedU2.some((a) => /wait for review\/merge/.test(a.title)), 'unmergedWarnMinutes 0 turns the check off');
+
   // ---- the external watchdog
   let st = { fails: 0, paused: false };
   let r = watchStep(st, true, 0);
