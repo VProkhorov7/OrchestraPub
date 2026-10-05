@@ -238,7 +238,7 @@ A separate watchdog, `orchestra-ctl watch`, is run by launchd once a minute, ind
 
 **Automatic retry.** A task that failed or timed out is restarted on another suitable worker (the cheapest one not tried yet), up to three times. The run journal shows «Auto-retry 1/3», and the orchestrator does not delegate such a task again but waits for the new one. If three retries do not help, Orchestra stops the task and the orchestrator asks you a question: what happened, what was tried and what to do next (retry on a worker you name, rewrite the brief, do it yourself, put it off). Stops caused by a cap or a budget are not retried.
 
-Settings in `config.json`: `autoRetry` (the number of retries, 3 by default, 0 turns it off) and `notify`: `macos` (true/false), `macosLevel` (`warn` or `error`), `silentMinutes` (8 by default), `webhook` (an address or empty).
+Settings in `config.json`: `autoRetry` (the number of retries, 3 by default, 0 turns it off) and `notify`: `macos` (true/false), `macosLevel` (`warn` or `error`), `silentMinutes` (8 by default), `taskCostWarnUsd` (1 by default, 0 turns it off), `unmergedWarnMinutes` (60 by default, 0 turns it off), `webhook` (an address or empty).
 
 ## 10. English mode: preparing the environment
 

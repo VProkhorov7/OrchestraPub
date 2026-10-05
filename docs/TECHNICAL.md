@@ -120,7 +120,7 @@ One process owns every run, so the run budget, the worker limit, connection ligh
 
 - **Web panel** at `http://<host>:7777/?token=<token>`: the same UI as the desktop app (settings, lights, plan, workers live, history, spend). Open it from the MacBook over Tailscale.
 - **MCP over HTTP** at `http://<host>:7777/mcp`, header `Authorization: Bearer <token>`:
-  - with `?repo=<absolute path>` the connected agent is the orchestrator: `list_workers`, `delegate`, `wait_for`, `task_status`, `get_diff`, `merge_task`, `discard_task`, `end_session`. The session shows up live in the panel and in History.
+  - with `?repo=<absolute path>` the connected agent is the orchestrator: `list_workers` (with a 7-day track record per worker: tasks, merged, spend, waste, $ per merged task), `delegate`, `wait_for`, `task_status`, `get_diff`, `merge_task`, `discard_task`, `end_session`. The session shows up live in the panel and in History.
   - always: **autopilot** tools, where Orchestra plans and orchestrates itself: `autopilot_start(goal, repo)` → (`autopilot_approve`) → `run_status`, plus `list_runs`, `cancel_run`. Useful for weak clients or a phone.
 
 ```bash
