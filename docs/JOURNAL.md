@@ -4,6 +4,22 @@
 
 <!-- entries -->
 
+## 05.10.2026 21:37 · claude-code · 1 мин · запись автоматическая
+
+Итог сессии агент не записал (сессия агента завершилась). Изменено файлов: 1.
+
+## 05.10.2026 21:36 · claude-code · 43 мин
+
+Пункты 1, 3, 5 готовы и выложены: сторож 'не слито', Track record, пауза по 429, node_modules воркерам, NEEDS_ANSWER, ctl restart --when-idle; проба laguna-xs на tests; служба перезапущена на новом коде
+
+**Сделано:**
+- push + release:public (111545d), restart; wiki: CHANGELOG, TECHNICAL, SETUP; handoff-заметка переписана
+
+**Следующая задача:** решение по bai; проба бесплатной модели на живой задаче; поля лимитов в Настройках; автозамер баланса DeepSeek; живая проверка NEEDS_ANSWER и restart --when-idle
+
+Коммиты: `111545d`, `bcb7a23`, `aa408cf`, `1664289`, `4011457`, `46a6f01`, `1ad2288`, `f79d5e7`
+Файлы: package.json, src/main/cliorch.ts, src/main/engine.ts, src/main/prompts.ts, src/main/types.ts, src/main/waiting.ts, src/main/watchdog.ts, src/mcp/tools.ts, src/server/ctl.ts, src/test/helpers.ts, src/test/smoke-alerts.ts, src/test/smoke-ctl.ts и ещё 2
+
 ## 05.10.2026 20:53 · claude-code · 15 мин
 
 Воркерам даётся node_modules симлинком без коммита (t03 claude-sub), unit-тесты ratelimit (laguna, доделал лидер), выложено в оба репо, служба перезапущена

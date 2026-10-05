@@ -806,6 +806,9 @@ function fillSettings(cfg) {
   form.elements['anthropic.model'].value = cfg.anthropic.model;
   form.elements['anthropic.maxTokens'].value = cfg.anthropic.maxTokens;
   form.elements['runBudgetUsd'].value = cfg.runBudgetUsd ?? 0;
+  form.elements['taskCapUsd'].value = Object.entries(cfg.taskCapUsd ?? {}).map(([r, v]) => `${r}=${v}`).join(', ');
+  form.elements['notify.taskCostWarnUsd'].value = cfg.notify?.taskCostWarnUsd ?? '';
+  form.elements['notify.unmergedWarnMinutes'].value = cfg.notify?.unmergedWarnMinutes ?? '';
   form.elements['plannerPick'].value = cfg.plannerPick ?? 'ask';
   form.elements['serve.host'].value = cfg.serve?.host ?? '127.0.0.1';
   form.elements['serve.port'].value = cfg.serve?.port ?? 7777;
@@ -841,8 +844,21 @@ function readSettings() {
   const ids = providers.map((p) => p.id);
   const dup = ids.find((id, i) => !id || ids.indexOf(id) !== i);
   if (dup !== undefined) throw new Error(dup ? `id «${dup}» повторяется` : 'у подключения пустой id');
+  const taskCapUsd = {};
+  for (const part of form.elements['taskCapUsd'].value.split(',').map((s) => s.trim()).filter(Boolean)) {
+    const [role, usd] = part.split('=').map((s) => s.trim());
+    if (!role || !(Number(usd) >= 0) || usd === '') throw new Error(`лимит на задачу: не понял «${part}», нужно роль=сумма, например feature=2`);
+    taskCapUsd[role] = Number(usd);
+  }
+  const numOrUndef = (name) => (form.elements[name].value.trim() === '' ? undefined : Math.max(0, Number(form.elements[name].value)));
   return {
     ...state.config,
+    taskCapUsd: Object.keys(taskCapUsd).length ? taskCapUsd : undefined,
+    notify: {
+      ...state.config.notify,
+      taskCostWarnUsd: numOrUndef('notify.taskCostWarnUsd'),
+      unmergedWarnMinutes: numOrUndef('notify.unmergedWarnMinutes'),
+    },
     orchestrator: {
       mode: form.querySelector('[name=orchMode]:checked')?.value ?? 'claude-sub',
       claudeModel: form.elements['orchestrator.claudeModel'].value,

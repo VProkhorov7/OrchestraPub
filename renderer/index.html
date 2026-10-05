@@ -286,6 +286,11 @@
           </select>
         </label>
         <label>Бюджет на запуск, $ (API-расходы воркеров и оркестратора; подписки и планы не в долларах; 0 = без лимита) <input name="runBudgetUsd" type="number" min="0" step="any" /></label>
+        <label>Лимит на одну задачу, $ по ролям (например: feature=2, refactor=0.5; роль не названа = стандартный: feature и refactor 3, review и docs 0.5, остальные 1.5; роль=0 — без лимита) <input name="taskCapUsd" type="text" /></label>
+        <div class="grid2">
+          <label>Предупредить, если задача стоит больше, $ (пусто = 1) <input name="notify.taskCostWarnUsd" type="number" min="0" step="any" /></label>
+          <label>Предупредить, если готовое не слито, минут (пусто = 60, 0 = не предупреждать) <input name="notify.unmergedWarnMinutes" type="number" min="0" step="any" /></label>
+        </div>
         <label>Дополнительные инструкции оркестратору <textarea name="orchestratorPreamble" rows="2" placeholder="например: после каждого слияния запускай npm test"></textarea></label>
       </fieldset>
 
