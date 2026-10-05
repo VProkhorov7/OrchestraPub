@@ -4,6 +4,18 @@
 
 <!-- entries -->
 
+## 05.10.2026 20:53 · claude-code · 15 мин
+
+Воркерам даётся node_modules симлинком без коммита (t03 claude-sub), unit-тесты ratelimit (laguna, доделал лидер), выложено в оба репо, служба перезапущена
+
+**Сделано:**
+- git.ts linkNodeModules + exclude + git rm --cached; smoke-worktree; smoke-ratelimit-unit; push, release:public, restart
+
+**Следующая задача:** повторная проба laguna-s-2.1:free на живом воркере с node_modules; выяснить unrecognized_model; решить про bai; пункт 5; push коммита памяти
+
+Коммиты: `ca83532`, `f145140`, `ee6e626`, `47a9d8c`
+Файлы: package.json, src/main/git.ts, src/test/smoke-ratelimit-unit.ts, src/test/smoke-worktree.ts
+
 ## 05.10.2026 20:38 · claude-code · 272 мин
 
 Счётчик пауз по 429 (claude-sub t01) слит и выложен; модель OpenRouter free переключена на poolside/laguna-s-2.1:free; служба перезапущена на новом коде
