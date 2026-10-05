@@ -4,6 +4,18 @@
 
 <!-- entries -->
 
+## 05.10.2026 20:38 · claude-code · 272 мин
+
+Счётчик пауз по 429 (claude-sub t01) слит и выложен; модель OpenRouter free переключена на poolside/laguna-s-2.1:free; служба перезапущена на новом коде
+
+**Сделано:**
+- ratelimit.ts, smoke-ratelimit, watchdog warn, PAUSED в list_workers; push + release:public; wiki: TECHNICAL, SETUP, CHANGELOG
+
+**Следующая задача:** пробная задача tests/docs на laguna-s-2.1:free; пункт 5 'воркер ждёт ответа'; push коммита changelog
+
+Коммиты: `3d9714b`, `be1c016`, `806f75d`, `6ee7b56`, `195099e`, `0976017`
+Файлы: package.json, src/main/engine.ts, src/main/planner.ts, src/main/ratelimit.ts, src/main/types.ts, src/main/watchdog.ts, src/test/helpers.ts, src/test/smoke-ratelimit.ts
+
 ## 05.10.2026 16:06 · claude-code · 156 мин
 
 Выпуск: приватный b8733a8 и публичный Sync 0.7.5 запушены, служба перезапущена с новым сторожем и Track record; в public-rules.json исключён .memory/log/

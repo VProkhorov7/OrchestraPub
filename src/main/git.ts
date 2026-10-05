@@ -81,13 +81,35 @@ export async function isDirty(repo: string): Promise<boolean> {
 export async function createWorktree(repo: string, worktreeDir: string, branch: string, startPoint = 'HEAD'): Promise<string> {
   fs.mkdirSync(path.dirname(worktreeDir), { recursive: true });
   await git(['worktree', 'add', '-b', branch, worktreeDir, startPoint], repo);
+  await linkNodeModules(repo, worktreeDir);
   return headSha(worktreeDir);
+}
+
+/**
+ * Give the worktree the main repo's node_modules (a symlink) so a worker can build and run tests.
+ * The link is kept out of commits: `node_modules` goes to the shared info/exclude (a `.gitignore` of `node_modules/` does not match a symlink).
+ */
+async function linkNodeModules(repo: string, worktreeDir: string) {
+  try {
+    const src = path.join(repo, 'node_modules');
+    const dst = path.join(worktreeDir, 'node_modules');
+    if (!fs.lstatSync(src, { throwIfNoEntry: false })?.isDirectory() || fs.lstatSync(dst, { throwIfNoEntry: false })) return;
+    fs.symlinkSync(path.resolve(src), dst, 'dir');
+    const exclude = path.resolve(repo, (await git(['rev-parse', '--git-path', 'info/exclude'], repo)).trim());
+    const old = fs.existsSync(exclude) ? fs.readFileSync(exclude, 'utf8') : '';
+    if (old.split('\n').some((l) => l.trim() === 'node_modules')) return;
+    fs.mkdirSync(path.dirname(exclude), { recursive: true });
+    fs.appendFileSync(exclude, `${old && !old.endsWith('\n') ? '\n' : ''}node_modules\n`);
+  } catch {
+    // no node_modules for the worker is not worth failing the task
+  }
 }
 
 /** Commit whatever the worker left uncommitted so the diff is complete. */
 export async function commitAll(worktree: string, message: string): Promise<boolean> {
   if (!(await git(['status', '--porcelain'], worktree)).length) return false; // every change counts here, memory files too
   await git(['add', '-A'], worktree);
+  await run('git', ['rm', '--cached', '-q', '--ignore-unmatch', 'node_modules'], worktree); // never commit the node_modules symlink
   const r = await run(
     'git',
     ['-c', 'user.name=orchestra', '-c', 'user.email=orchestra@localhost', 'commit', '-q', '-m', message],

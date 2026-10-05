@@ -42,7 +42,7 @@ Then pick a repository (must be a git repo with a clean working tree), describe 
 
 For each delegated task:
 
-1. `git worktree add -b orch/<run>-t01-<slug> <userData>/worktrees/<run>/t01 HEAD` (the run id in the branch name keeps runs from colliding)
+1. `git worktree add -b orch/<run>-t01-<slug> <userData>/worktrees/<run>/t01 HEAD` (the run id in the branch name keeps runs from colliding). If the repo has a real `node_modules`, the worktree gets a symlink to it (so workers can build and run tests); `node_modules` is added to the shared `info/exclude` and `commitAll` runs `git rm --cached --ignore-unmatch node_modules`, so the link never lands in a commit.
 2. `claude -p "<brief>" --output-format stream-json --verbose --model <model> --dangerously-skip-permissions` in that worktree, with
    `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL` set for the provider. The orchestrator's own key is stripped from the worker env.
 3. Whatever the worker left uncommitted is committed; diff stat + diff go back to Claude.

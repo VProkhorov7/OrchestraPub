@@ -5,7 +5,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { Hub } from '../main/hub';
-import { tmpdir, check } from './helpers';
+import { tmpdir, check, makeRepo, sh } from './helpers';
+import { createWorktree, commitAll, removeWorktree, fullDiff } from '../main/git';
 
 (async () => {
   const tmp = tmpdir('orch-wt-');
@@ -37,6 +38,33 @@ import { tmpdir, check } from './helpers';
   const before = fs.readFileSync(out, 'utf8');
   r = await hub.openWorktree('r1', 't01', false);
   check(!r.opened && r.path === there && fs.readFileSync(out, 'utf8') === before, 'a remote browser: nothing is opened on the server, the path is returned');
+
+  // node_modules of the main repo is linked into the worktree, never committed, and survives removeWorktree
+  fs.mkdirSync(path.join(tmp, 'a'));
+  const repoA = makeRepo(path.join(tmp, 'a'));
+  fs.mkdirSync(path.join(repoA, 'node_modules'));
+  const marker = path.join(repoA, 'node_modules', 'marker.txt');
+  fs.writeFileSync(marker, 'm');
+  fs.writeFileSync(path.join(repoA, '.gitignore'), 'node_modules/\n');
+  sh('git', ['add', '.gitignore'], repoA);
+  sh('git', ['commit', '-q', '-m', 'ignore'], repoA);
+  const wtA = path.join(tmp, 'wt-a');
+  const baseA = await createWorktree(repoA, wtA, 'orch/a', 'HEAD');
+  const link = path.join(wtA, 'node_modules');
+  check(fs.lstatSync(link).isSymbolicLink() && fs.realpathSync(link) === fs.realpathSync(path.join(repoA, 'node_modules')) && fs.existsSync(path.join(link, 'marker.txt')), 'the worktree gets a symlink to the repo node_modules');
+  fs.writeFileSync(path.join(wtA, 'new.txt'), 'x\n');
+  check(await commitAll(wtA, 'work'), 'the work is committed');
+  const tree = sh('git', ['ls-tree', '-r', 'HEAD', '--name-only'], wtA);
+  check(/new\.txt/.test(tree) && !/node_modules/.test(tree), 'the commit holds the work, not the node_modules symlink');
+  check(!/node_modules/.test(await fullDiff(wtA, baseA)), 'the diff has no node_modules');
+  await removeWorktree(repoA, wtA, 'orch/a', true);
+  check(!fs.existsSync(wtA) && fs.readFileSync(marker, 'utf8') === 'm', 'removing the worktree leaves the repo node_modules intact');
+
+  fs.mkdirSync(path.join(tmp, 'b'));
+  const repoB = makeRepo(path.join(tmp, 'b'));
+  const wtB = path.join(tmp, 'wt-b');
+  await createWorktree(repoB, wtB, 'orch/b', 'HEAD');
+  check(fs.existsSync(wtB) && !fs.existsSync(path.join(wtB, 'node_modules')), 'a repo without node_modules: the worktree is created without a link');
 
   delete process.env.ORCHESTRA_OPEN_CMD;
   console.log('SMOKE-WORKTREE OK');
