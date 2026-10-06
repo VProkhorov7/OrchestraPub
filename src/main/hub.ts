@@ -47,11 +47,11 @@ import { Alerts } from './alerts';
 import { freeOnlyReason, refreshFreeModels } from './freetier';
 import { listLocalModels, prepareOllamaContext } from './localmodels';
 import { Watchdog } from './watchdog';
-import { collectAttention } from './attention';
+import { collectAttention, AttentionRun } from './attention';
 import { pausedUntil } from './ratelimit';
 import { AppConfig, Health, OrchEvent, Plan, PlannerChoice, ROLES, RunState, Triage } from './types';
 import { ensureMemory } from '../memory/setup';
-import { execFile } from 'child_process';
+import { execFile, execFileSync } from 'child_process';
 
 type Controller = Orchestrator | CliOrchestrator;
 export interface Scheduled {
@@ -86,6 +86,11 @@ interface McpSession {
 }
 
 const MCP_IDLE_MS = 2 * 60 * 60_000;
+/** «Требует вас» ignores saved runs whose run.json is older than this. */
+const ATTENTION_MAX_RUN_AGE_MS = 30 * 24 * 60 * 60_000;
+/** How long a git answer about a task branch is reused (the panel polls every 2 s). */
+const ATTENTION_GIT_CACHE_MS = 60_000;
+const ATTENTION_GIT_TIMEOUT_MS = 5_000;
 
 /**
  * Everything the app does, without Electron: settings, connection health, the run registry
@@ -124,18 +129,75 @@ export class Hub {
     return [...apps, ...[...this.mcp.values()].map((m) => m.engine)];
   }
 
-  /** «Требует вас»: what waits for the owner, from the runs held in memory (see attention.ts). */
+  private branchGoneCache = new Map<string, { at: number; gone: boolean }>();
+
+  /**
+   * True when the task branch no longer exists in the repo or is already merged into the run's base branch: the task is
+   * closed even though run.json still says «done». Any doubt (no repo, no git, timeout, no base) = false: an extra item is better than a lost one.
+   */
+  private branchGone(repo: string, branch: string, base: string, now: number): boolean {
+    if (!repo || !branch || !base) return false;
+    const key = `${repo}\0${branch}\0${base}`;
+    const hit = this.branchGoneCache.get(key);
+    if (hit && now - hit.at < ATTENTION_GIT_CACHE_MS) return hit.gone;
+    const status = (args: string[]) => {
+      try {
+        execFileSync('git', args, { cwd: repo, stdio: 'ignore', timeout: ATTENTION_GIT_TIMEOUT_MS });
+        return 0;
+      } catch (e: any) {
+        return typeof e?.status === 'number' ? e.status : -1;
+      }
+    };
+    const exists = status(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]);
+    const gone = exists === 1 || (exists === 0 && status(['merge-base', '--is-ancestor', `refs/heads/${branch}`, base]) === 0);
+    this.branchGoneCache.set(key, { at: now, gone });
+    return gone;
+  }
+
+  /** Saved runs whose run.json was touched within ATTENTION_MAX_RUN_AGE_MS; older ones are not even read. */
+  private savedStates(now: number): RunState[] {
+    const out: RunState[] = [];
+    let names: string[] = [];
+    try {
+      names = fs.readdirSync(this.runs.dir);
+    } catch {
+      return out;
+    }
+    for (const n of names) {
+      try {
+        const f = path.join(this.runs.dir, n, 'run.json');
+        if (now - fs.statSync(f).mtimeMs > ATTENTION_MAX_RUN_AGE_MS) continue;
+        out.push(JSON.parse(fs.readFileSync(f, 'utf8')).state);
+      } catch {
+        /* unreadable run: skip */
+      }
+    }
+    return out;
+  }
+
+  /** «Требует вас»: what waits for the owner, from the live runs and the runs saved on disk (see attention.ts). */
   attention() {
     const cfg = this.config();
     const engines = new Map<string, TaskEngine>();
     for (const c of this.controllers.values()) engines.set(c.state.runId, c.engine);
     for (const m of this.mcp.values()) engines.set(m.engine.state.runId, m.engine);
     const now = Date.now();
+    const runs: AttentionRun[] = [...engines.values()].map((e) => {
+      const s = e.spent();
+      return { runId: e.state.runId, tasks: e.state.tasks, budgetUsd: e.budget(), spentTotal: s.total, spentByProvider: s.byProvider, live: true };
+    });
+    for (const s of this.savedStates(now)) {
+      if (!s?.runId || !Array.isArray(s.tasks) || engines.has(s.runId)) continue;
+      // A task that would give an item but whose branch is gone or merged is closed: shown to collectAttention as merged
+      // (kept in the list, so `continuedFrom` links of other tasks still work).
+      const tasks = s.tasks.map((t) => {
+        const open = t.status !== 'merged' && t.status !== 'discarded' && t.status !== 'cancelled' && (t.status === 'done' || t.needsAnswer || t.capped || t.escalated);
+        return open && this.branchGone(s.repo, t.branch, s.baseBranch, now) ? { ...t, status: 'merged' as const } : t;
+      });
+      runs.push({ runId: s.runId, tasks, budgetUsd: s.budgetUsd ?? 0, spentTotal: 0, spentByProvider: {}, live: false });
+    }
     return collectAttention({
-      runs: [...engines.values()].map((e) => {
-        const s = e.spent();
-        return { runId: e.state.runId, tasks: e.state.tasks, budgetUsd: e.budget(), spentTotal: s.total, spentByProvider: s.byProvider };
-      }),
+      runs,
       providers: cfg.providers,
       health: this.health,
       pausedUntil: Object.fromEntries(cfg.providers.map((p) => [p.id, pausedUntil(p.id, now)])),

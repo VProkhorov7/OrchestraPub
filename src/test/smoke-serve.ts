@@ -89,6 +89,13 @@ function repoIn(tmp: string, name: string) {
   check((await api('GET', '/../package.json')).status === 404, 'no path traversal');
   const rp = await api('GET', '/api/report?days=7');
   check(rp.status === 200 && rp.j.days === 7 && Array.isArray(rp.j.byProvider), 'GET /api/report answers');
+  fs.mkdirSync(path.join(home, 'runs', 'saved1'), { recursive: true });
+  const savedTask = { id: 't01', title: 'Saved', providerId: 'glm', status: 'done', log: [], needsAnswer: 'which port?' };
+  fs.writeFileSync(path.join(home, 'runs', 'saved1', 'run.json'), JSON.stringify({ version: 1, state: { runId: 'saved1', tasks: [savedTask], budgetUsd: 1 }, messages: [], savedAt: 0 }));
+  fs.mkdirSync(path.join(home, 'runs', 'broken'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'runs', 'broken', 'run.json'), '{oops');
+  const at = await api('GET', '/api/attention');
+  check(at.status === 200 && at.j.some((x: any) => x.kind === 'question' && x.runId === 'saved1') && !at.j.some((x: any) => x.kind === 'spend'), `GET /api/attention lists a saved, not live run (broken file skipped): ${JSON.stringify(at.j)}`);
   const lg = await api('POST', '/api/ledger', { id: 'p', balance: 5, unitUsd: 2 });
   check(lg.status === 200 && lg.j.find((x: any) => x.id === 'p')?.last.balance === 5, 'POST /api/ledger records a balance');
 

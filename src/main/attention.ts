@@ -29,6 +29,8 @@ export interface AttentionRun {
   budgetUsd: number;
   spentTotal: number;
   spentByProvider: Record<string, number>;
+  /** Held by a running engine. Spend is only reported for live runs: a finished run cannot get a bigger budget. */
+  live: boolean;
 }
 
 export interface AttentionInput {
@@ -53,7 +55,7 @@ export function collectAttention(input: AttentionInput): AttentionItem[] {
   const { now } = input;
 
   for (const run of input.runs) {
-    const closed = (t: WorkerTask) => run.tasks.some((x) => x.continuedFrom === t.id || x.id === t.retriedAs);
+    const closed = (t: WorkerTask) => run.tasks.some((x) => x.continuedFrom === t.id || (!!t.retriedAs && x.id === t.retriedAs));
     for (const t of run.tasks) {
       if (t.status === 'merged' || t.status === 'discarded' || t.status === 'cancelled') continue;
       const who = `${t.title} (${t.id}, ${t.providerId}, запуск ${run.runId})`;
@@ -73,6 +75,7 @@ export function collectAttention(input: AttentionInput): AttentionItem[] {
       }
     }
 
+    if (!run.live) continue;
     const ratio = run.budgetUsd > 0 ? run.spentTotal / run.budgetUsd : 0;
     if (ratio >= SPEND_WARN)
       items.push({ kind: 'spend', level: ratio >= 1 ? 'error' : 'warn', what: ratio >= 1 ? `Бюджет запуска исчерпан: ${money(run.spentTotal)} из $${run.budgetUsd}` : `Запуск израсходовал ${Math.floor(ratio * 100)}% бюджета: ${money(run.spentTotal)} из $${run.budgetUsd}`, who: `запуск ${run.runId}`, hint: 'поднять бюджет запуска в настройках или остановить запуск', runId: run.runId });

@@ -9,8 +9,8 @@ import { check } from './helpers';
 const NOW = 10_000_000_000;
 const task = (id: string, extra: any = {}) => ({ id, title: `Task ${id}`, providerId: 'glm', status: 'done', log: [], ...extra });
 const prov = (id: string, extra: any = {}) => ({ id, label: id.toUpperCase(), enabled: true, ...extra });
-const input = (tasks: any[], extra: Partial<AttentionInput> = {}, budget = 0, spent = 0, byProvider: Record<string, number> = {}): AttentionInput => ({
-  runs: [{ runId: 'r1', tasks, budgetUsd: budget, spentTotal: spent, spentByProvider: byProvider }],
+const input = (tasks: any[], extra: Partial<AttentionInput> = {}, budget = 0, spent = 0, byProvider: Record<string, number> = {}, live = true): AttentionInput => ({
+  runs: [{ runId: 'r1', tasks, budgetUsd: budget, spentTotal: spent, spentByProvider: byProvider, live }],
   providers: [prov('glm') as any],
   health: {},
   pausedUntil: {},
@@ -59,6 +59,15 @@ check(kinds(input([], {}, 10, 9)).join() === 'spend', 'run budget at 90%');
 check(kinds(input([], {}, 10, 8.9)).length === 0, 'run budget below 90% is quiet');
 r = collectAttention(input([], { providers: [prov('glm', { maxUsdPerRun: 5 }) as any] }, 0, 4.6, { glm: 4.6 }));
 check(r.length === 1 && r[0].kind === 'spend' && /GLM/.test(r[0].who), `provider cap at 92%: ${JSON.stringify(r)}`);
+
+// finished runs (live=false): task items stay, spend items go
+const dead = (tasks: any[], budget = 0, spent = 0, byProvider: Record<string, number> = {}, extra: Partial<AttentionInput> = {}) => input(tasks, extra, budget, spent, byProvider, false);
+check(kinds(dead([task('t01', { finishedAt: old })])).join() === 'unmerged', 'a finished run still reports an unmerged task');
+check(kinds(dead([task('t01', { finishedAt: old })], 10, 9.5)).join() === 'unmerged', 'a finished run at 95% of budget: no spend item');
+check(kinds(dead([], 10, 9.5, { glm: 9.5 }, { providers: [prov('glm', { maxUsdPerRun: 5 }) as any] })).length === 0, 'a finished run over the provider cap: no spend item');
+check(kinds(input([task('t01', { finishedAt: old })], {}, 10, 9.5)).join() === 'unmerged,spend', 'a live run at 95% of budget: spend item');
+check(kinds(input([task('t01', { status: 'failed', escalated: true, retriedAs: 't02' }), task('t02', { status: 'running' })])).length === 0, 'a task whose retry exists is closed');
+check(kinds(input([task('t01', { status: 'failed', escalated: true, retriedAs: 't09' })])).join() === 'decision', 'a retriedAs that points nowhere does not close the task');
 
 // ordering: urgent first whatever the input order
 const all = input(
