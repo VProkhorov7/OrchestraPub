@@ -223,6 +223,8 @@ export interface WorkerTask {
   capped?: boolean;
   /** This task goes on from the branch of an earlier one. */
   continuedFrom?: string;
+  /** Only for a continuation of a task from another run (`continuedFrom` = `runId/taskId`): the branch to start from. */
+  continuedFromBranch?: string;
   retriedAs?: string;
   /** All automatic retries failed: the owner has to decide. `question` is what they are asked. */
   escalated?: boolean;

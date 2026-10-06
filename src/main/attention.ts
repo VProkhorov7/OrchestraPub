@@ -20,6 +20,9 @@ export interface AttentionItem {
   hint: string;
   runId?: string;
   taskId?: string;
+  /** Only for kind 'unmerged': the task branch and its short diff stat (for the merge/discard buttons' confirmation). */
+  branch?: string;
+  diffStat?: string;
 }
 
 export interface AttentionRun {
@@ -54,8 +57,12 @@ export function collectAttention(input: AttentionInput): AttentionItem[] {
   const items: AttentionItem[] = [];
   const { now } = input;
 
+  // A continuation started from the panel may live in another run: it points back as `runId/taskId`.
+  const continuedAcross = new Set<string>();
+  for (const run of input.runs) for (const x of run.tasks) if (x.continuedFrom?.includes('/')) continuedAcross.add(x.continuedFrom);
+
   for (const run of input.runs) {
-    const closed = (t: WorkerTask) => run.tasks.some((x) => x.continuedFrom === t.id || (!!t.retriedAs && x.id === t.retriedAs));
+    const closed = (t: WorkerTask) => run.tasks.some((x) => x.continuedFrom === t.id || (!!t.retriedAs && x.id === t.retriedAs)) || continuedAcross.has(`${run.runId}/${t.id}`);
     for (const t of run.tasks) {
       if (t.status === 'merged' || t.status === 'discarded' || t.status === 'cancelled') continue;
       const who = `${t.title} (${t.id}, ${t.providerId}, запуск ${run.runId})`;
@@ -71,7 +78,7 @@ export function collectAttention(input: AttentionInput): AttentionItem[] {
         items.push({ kind: 'decision', level: 'error', what: 'Задача не выполнена после автоповторов, нужно ваше решение', who, hint: 'выбрать: другой исполнитель, упростить бриф, сделать самому или отложить', ...at });
       } else if (t.status === 'done' && !closed(t) && input.unmergedWarnMinutes > 0 && t.finishedAt && now - t.finishedAt > input.unmergedWarnMinutes * 60_000) {
         const mins = Math.round((now - t.finishedAt) / 60_000);
-        items.push({ kind: 'unmerged', level: 'warn', what: `Готово ${mins} мин назад, но не слито`, who, hint: 'слить (merge) или отбросить (discard)', ...at });
+        items.push({ kind: 'unmerged', level: 'warn', what: `Готово ${mins} мин назад, но не слито`, who, hint: 'слить (merge) или отбросить (discard)', branch: t.branch, diffStat: t.diffStat, ...at });
       }
     }
 

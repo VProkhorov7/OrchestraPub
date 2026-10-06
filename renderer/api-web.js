@@ -80,7 +80,10 @@
     cancel: (runId) => post(`/api/runs/${enc(runId)}/cancel`),
     getState: (runId) => get(runId ? `/api/runs/${enc(runId)}` : '/api/runs/current'),
     mergeTask: (runId, id) => post(`/api/runs/${enc(runId)}/tasks/${enc(id)}/merge`),
+    taskDiff: (runId, id) => get(`/api/runs/${enc(runId)}/tasks/${enc(id)}/diff`),
     discardTask: (runId, id) => post(`/api/runs/${enc(runId)}/tasks/${enc(id)}/discard`),
+    continueTask: (runId, id, opts) => post(`/api/runs/${enc(runId)}/tasks/${enc(id)}/continue`, opts),
+    continueOptions: (runId, id) => get(`/api/runs/${enc(runId)}/tasks/${enc(id)}/continue-options`),
     // The service opens the folder in Finder when this browser is on the same machine; otherwise the path is copied.
     openWorktree: async (runId, id) => {
       let r;

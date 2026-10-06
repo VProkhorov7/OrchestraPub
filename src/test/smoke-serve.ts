@@ -98,6 +98,47 @@ function repoIn(tmp: string, name: string) {
   check(at.status === 200 && at.j.some((x: any) => x.kind === 'question' && x.runId === 'saved1') && !at.j.some((x: any) => x.kind === 'spend'), `GET /api/attention lists a saved, not live run (broken file skipped): ${JSON.stringify(at.j)}`);
   const rc = await api('GET', '/api/recent');
   check(rc.status === 200 && rc.j.some((x: any) => x.runId === 'saved1' && x.taskId === 't01' && x.status === 'done') && rc.j.length === 1, `GET /api/recent lists a saved run's done task (broken file skipped): ${JSON.stringify(rc.j)}`);
+  // task diff of a saved run: a real branch in a temp repo, then a missing one
+  const drepo = repoIn(tmp, 'diffrepo');
+  const dbase = sh('git', ['rev-parse', 'HEAD'], drepo).trim();
+  sh('git', ['checkout', '-q', '-b', 'orch/d-t01'], drepo);
+  fs.writeFileSync(path.join(drepo, 'hello.txt'), 'hello\nworld\n');
+  sh('git', ['commit', '-qam', 'change'], drepo);
+  sh('git', ['checkout', '-q', 'main'], drepo);
+  fs.mkdirSync(path.join(home, 'runs', 'saved2'), { recursive: true });
+  const dt = (id: string, branch: string) => ({ id, title: 'D', providerId: 'glm', status: 'done', log: [], branch, baseSha: dbase });
+  fs.writeFileSync(path.join(home, 'runs', 'saved2', 'run.json'), JSON.stringify({ version: 1, state: { runId: 'saved2', repo: drepo, baseBranch: 'main', tasks: [dt('t01', 'orch/d-t01'), dt('t02', 'orch/nope')], budgetUsd: 1 }, messages: [], savedAt: 0 }));
+  const df = await api('GET', '/api/runs/saved2/tasks/t01/diff');
+  check(df.status === 200 && typeof df.j === 'string' && df.j.includes('+world'), `GET task diff of a saved run: ${JSON.stringify(df.j)}`);
+  const dn = await api('GET', '/api/runs/saved2/tasks/t02/diff');
+  check(dn.status === 200 && typeof dn.j === 'string' && /Не удалось получить diff/.test(dn.j), `GET task diff of a missing branch is a clear line, not 500: ${dn.status} ${JSON.stringify(dn.j)}`);
+  // saved run whose repo folder is gone, a task without baseSha, an unsafe baseSha
+  const gone = path.join(tmp, 'no-such-repo');
+  const evil = path.join(tmp, 'evil-out.txt');
+  fs.mkdirSync(path.join(home, 'runs', 'saved3'), { recursive: true });
+  const bt = (id: string, extra: any) => ({ id, title: 'G', providerId: 'glm', status: 'done', log: [], branch: 'orch/g-' + id, ...extra });
+  const run3 = path.join(home, 'runs', 'saved3', 'run.json');
+  fs.writeFileSync(run3, JSON.stringify({ version: 1, state: { runId: 'saved3', repo: gone, baseBranch: 'main', tasks: [bt('t01', { baseSha: dbase }), bt('t02', {})], budgetUsd: 1 }, messages: [], savedAt: 0 }));
+  const gd = await api('GET', '/api/runs/saved3/tasks/t01/diff');
+  check(gd.status === 200 && /^Не удалось получить diff/.test(gd.j), `diff with a missing repo: ${gd.status} ${JSON.stringify(gd.j)}`);
+  const nb = await api('GET', '/api/runs/saved3/tasks/t02/diff');
+  check(nb.status === 200 && nb.j === 'У задачи ещё нет изменений.', `diff without baseSha: ${JSON.stringify(nb.j)}`);
+  // unsafe baseSha in a run whose repo EXISTS (git would really run): neither `evil` nor git's own `<evil>..<branch>` path may appear
+  const evilGit = evil + '..orch/d-t01';
+  fs.mkdirSync(path.dirname(evilGit), { recursive: true }); // git could write there
+  fs.mkdirSync(path.join(home, 'runs', 'saved4'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'runs', 'saved4', 'run.json'), JSON.stringify({ version: 1, state: { runId: 'saved4', repo: drepo, baseBranch: 'main', tasks: [{ ...dt('t01', 'orch/d-t01'), baseSha: '--output=' + evil }], budgetUsd: 1 }, messages: [], savedAt: 0 }));
+  const ev = await api('GET', '/api/runs/saved4/tasks/t01/diff');
+  check(!fs.existsSync(evil) && !fs.existsSync(evilGit), `unsafe baseSha: no file written by git (${evil} / ${evilGit})`);
+  check(ev.status === 200 && /недопустимые данные/.test(ev.j), `unsafe baseSha refused with a clear line: ${JSON.stringify(ev.j)}`);
+  for (const act of ['merge', 'discard']) {
+    const r = await api('POST', `/api/runs/saved3/tasks/t01/${act}`);
+    check(/^Репозиторий не найден/.test(JSON.stringify(r.j).replace(/^"/, '')), `${act} with a missing repo: ${JSON.stringify(r.j)}`);
+  }
+  await sleep(300);
+  check(JSON.parse(fs.readFileSync(run3, 'utf8')).state.tasks[0].status === 'done', 'task status in run.json stays done after refused merge/discard');
+  const nullBody = await fetch(base + '/api/runs/saved3/tasks/t01/continue', { method: 'POST', headers: { authorization: 'Bearer secret', 'content-type': 'application/json' }, body: 'null' });
+  check(nullBody.status === 200 && /^"?(Задача не найдена|Эту задачу продолжить нельзя|Репозиторий не найден)/.test(await nullBody.text()), 'POST /continue with a JSON null body: 200 and a refusal line, not 500');
   const lg = await api('POST', '/api/ledger', { id: 'p', balance: 5, unitUsd: 2 });
   check(lg.status === 200 && lg.j.find((x: any) => x.id === 'p')?.last.balance === 5, 'POST /api/ledger records a balance');
 

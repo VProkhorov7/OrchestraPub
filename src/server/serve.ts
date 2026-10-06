@@ -335,6 +335,16 @@ export async function serve(opts: ServeOptions = {}) {
         return json(res, 200, await hub.merge(runId, taskId));
       case 'POST /runs/:id/tasks/:tid/discard':
         return json(res, 200, await hub.discard(runId, taskId));
+      case 'POST /runs/:id/tasks/:tid/continue': {
+        const b = (await body(req)) ?? {};
+        return json(res, 200, await hub.continueTask(runId, taskId, { provider: String(b.provider ?? ''), text: b.text == null ? undefined : String(b.text), title: b.title == null ? undefined : String(b.title) }));
+      }
+      case 'GET /runs/:id/tasks/:tid/continue-options': {
+        const o = hub.continueOptions(runId, taskId);
+        return o ? json(res, 200, o) : json(res, 404, { error: 'Задача не найдена' });
+      }
+      case 'GET /runs/:id/tasks/:tid/diff':
+        return json(res, 200, await hub.taskDiff(runId, taskId));
       case 'POST /runs/:id/tasks/:tid/open': {
         // Only a browser on this very machine can have the folder opened here; a remote one gets the path instead.
         const a = req.socket.remoteAddress ?? '';

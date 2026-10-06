@@ -40,7 +40,10 @@ contextBridge.exposeInMainWorld('orch', {
   cancel: (runId?: string) => ipcRenderer.invoke('run:cancel', runId),
   getState: (runId?: string) => ipcRenderer.invoke('run:state', runId),
   mergeTask: (runId: string, id: string) => ipcRenderer.invoke('task:merge', runId, id),
+  taskDiff: (runId: string, id: string) => ipcRenderer.invoke('task:diff', runId, id),
   discardTask: (runId: string, id: string) => ipcRenderer.invoke('task:discard', runId, id),
+  continueTask: (runId: string, id: string, opts: { provider: string; text?: string; title?: string }) => ipcRenderer.invoke('task:continue', runId, id, opts),
+  continueOptions: (runId: string, id: string) => ipcRenderer.invoke('task:continueOptions', runId, id),
   openWorktree: (runId: string, id: string) => ipcRenderer.invoke('task:openWorktree', runId, id),
   isWeb: false,
   onEvent: (cb: (ev: unknown) => void) => {

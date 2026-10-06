@@ -19,6 +19,33 @@ export const MAX_DIFF_CHARS_FOR_LLM = 60_000;
 
 export type Emit = (ev: OrchEvent) => void;
 
+/** A task of ANOTHER run to continue from: only its branch and summary are needed (see Hub.continueTask). */
+export interface ExternalPrev {
+  /** `runId/taskId`. */
+  ref: string;
+  branch: string;
+  baseSha: string;
+  error?: string;
+  result?: string;
+  lastLog?: string;
+}
+
+/** Enabled, working workers that may take `role` (the engine's providersFor, usable without an engine). */
+export function providersForRole(cfg: AppConfig, role: string): ProviderConfig[] {
+  return cfg.providers.filter((p) => {
+    const light = cfg.health?.[p.id]?.light;
+    return p.enabled && canWork(p) && !pausedUntil(p.id) && light !== 'red' && light !== 'yellow' && !freeOnlyReason(cfg, p) && (!p.roles?.length || p.roles.includes(role));
+  });
+}
+
+/** What one task of this role may cost, in dollars (0 = no cap). A review only reads, so it gets the smallest cap. */
+export function taskCapFor(cfg: AppConfig, role?: string): number {
+  const caps = cfg.taskCapUsd ?? {};
+  const def = { review: 0.5, docs: 0.5, feature: 3, refactor: 3, default: 1.5 } as Record<string, number>;
+  const r = role ?? 'default';
+  return caps[r] ?? def[r] ?? caps.default ?? def.default;
+}
+
 export function isTerminal(s: WorkerTask['status']): boolean {
   return !['queued', 'running'].includes(s);
 }
@@ -100,10 +127,7 @@ export class TaskEngine {
 
   /** What one task of this role may cost, in dollars (0 = no cap). A review only reads, so it gets the smallest cap. */
   taskCap(t: WorkerTask): number {
-    const caps = this.cfg.taskCapUsd ?? {};
-    const def = { review: 0.5, docs: 0.5, feature: 3, refactor: 3, default: 1.5 } as Record<string, number>;
-    const role = t.role ?? 'default';
-    return caps[role] ?? def[role] ?? caps.default ?? def.default;
+    return taskCapFor(this.cfg, t.role);
   }
 
   /** Called after any cost change. Stops workers that went over a cap. */
@@ -151,13 +175,10 @@ export class TaskEngine {
 
   /** Enabled, working workers that may take `role`. */
   providersFor(role: string): ProviderConfig[] {
-    return this.cfg.providers.filter((p) => {
-      const light = this.cfg.health?.[p.id]?.light;
-      return p.enabled && canWork(p) && !pausedUntil(p.id) && light !== 'red' && light !== 'yellow' && !freeOnlyReason(this.cfg, p) && (!p.roles?.length || p.roles.includes(role));
-    });
+    return providersForRole(this.cfg, role);
   }
 
-  delegate(input: { provider: string; role?: string; title: string; spec: string; continueFrom?: string; retry?: { of: string; jobId: string; attempt: number } }): string {
+  delegate(input: { provider: string; role?: string; title: string; spec: string; continueFrom?: string; continueFromExternal?: ExternalPrev; linkFrom?: string; retry?: { of: string; jobId: string; attempt: number } }): string {
     if (this.cancelled) throw new Error('run is cancelled');
     if (this.budgetExhausted || (this.budget() > 0 && this.budgetUsed() >= 1))
       throw new Error(`run budget exhausted (${this.spendReport()}). Do not delegate; merge or discard finished tasks and finish.`);
@@ -215,11 +236,17 @@ export class TaskEngine {
     if (forcedId && forcedId !== input.provider) this.log('system', `Принудительный маршрут: запрошен ${input.provider}, выполняет ${forcedId}`);
 
     let spec = input.spec;
-    let prev: WorkerTask | undefined;
+    let prev: { id: string; branch: string; baseSha: string; error?: string; result?: string; lastLog?: string } | undefined;
     if (input.continueFrom) {
-      prev = this.mustTask(input.continueFrom);
-      if (!['failed', 'timeout', 'done'].includes(prev.status)) throw new Error(`task ${prev.id} is ${prev.status}: only a stopped, failed or finished task can be continued`);
-      spec = `This is a CONTINUATION. An earlier worker${prev.error ? ` (${prev.error})` : ''} was stopped before it finished. Its changes are already committed in your worktree (see \`git log\` and \`git diff ${prev.baseSha.slice(0, 8)}\`). Read them, do not start over, and finish what is missing.\n\nEarlier worker's last message:\n${(prev.result || (prev.log[prev.log.length - 1] ?? '')).slice(0, 1500)}\n\nThe task:\n${input.spec}`;
+      const p = this.mustTask(input.continueFrom);
+      if (!['failed', 'timeout', 'done'].includes(p.status)) throw new Error(`task ${p.id} is ${p.status}: only a stopped, failed or finished task can be continued`);
+      prev = { id: p.id, branch: p.branch, baseSha: p.baseSha, error: p.error, result: p.result, lastLog: p.log[p.log.length - 1] };
+    } else if (input.continueFromExternal) {
+      const x = input.continueFromExternal;
+      prev = { id: x.ref, ...x };
+    }
+    if (prev) {
+      spec = `This is a CONTINUATION. An earlier worker${prev.error ? ` (${prev.error})` : ''} was stopped before it finished. Its changes are already committed in your worktree (see \`git log\` and \`git diff ${prev.baseSha.slice(0, 8)}\`). Read them, do not start over, and finish what is missing.\n\nEarlier worker's last message:\n${(prev.result || (prev.lastLog ?? '')).slice(0, 1500)}\n\nThe task:\n${input.spec}`;
     }
     const id = `t${(this.state.tasks.length + 1).toString().padStart(2, '0')}`;
     const slug = String(input.title).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
@@ -231,7 +258,8 @@ export class TaskEngine {
       spec,
       role: input.role,
       status: 'queued',
-      continuedFrom: prev?.id,
+      continuedFrom: prev?.id ?? input.linkFrom, // linkFrom: only a link («runId/taskId») for a clean-sheet start, no header, no branch
+      continuedFromBranch: input.continueFromExternal && !input.continueFrom ? input.continueFromExternal.branch : undefined,
       branch: `orch/${this.state.runId.replace(/^(run|mcp)-/, '')}-${id}-${slug || 'task'}`,
       worktree: path.join(this.worktreeRoot, this.state.runId, id),
       baseSha: '',
@@ -315,8 +343,9 @@ export class TaskEngine {
   private async execute(task: WorkerTask): Promise<void> {
     const provider = this.cfg.providers.find((p) => p.id === task.providerId)!;
     try {
-      const from = task.continuedFrom ? this.task(task.continuedFrom) : undefined;
-      task.baseSha = await git.createWorktree(this.state.repo, task.worktree, task.branch, from?.branch);
+      // A continuation of a task from another run («runId/taskId») carries the branch itself; inside a run it is looked up.
+      const startBranch = task.continuedFrom?.includes('/') ? task.continuedFromBranch : task.continuedFrom ? this.task(task.continuedFrom)?.branch : undefined;
+      task.baseSha = await git.createWorktree(this.state.repo, task.worktree, task.branch, startBranch);
       task.startedAt = Date.now();
       this.setStatus(task, 'running');
 
@@ -457,11 +486,12 @@ export class TaskEngine {
   private afterFailure(task: WorkerTask) {
     if (!['failed', 'timeout'].includes(task.status) || this.cancelled || this.budgetExhausted || this.frozen) return;
     if (/превышен лимит|исчерпан бюджет/.test(task.error ?? '')) return; // stopped on purpose by a cap
+    const noWorktree = !!task.continuedFrom && !task.startedAt; // the branch it continues vanished: a clean-sheet retry would spend money against the owner's intent, so ask the owner
     if (task.rateLimited) return this.afterRateLimit(task);
     const max = this.cfg.autoRetry ?? 3;
     const attempt = task.attempt ?? 1;
     const L = this.cfg.language;
-    if (attempt <= max) {
+    if (attempt <= max && !noWorktree) {
       const p = this.retryProvider(task);
       if (p) {
         try {

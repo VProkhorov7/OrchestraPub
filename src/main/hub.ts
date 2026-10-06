@@ -3,7 +3,7 @@ import * as path from 'path';
 import { ConfigStore, anthropicKey } from './config';
 import { Orchestrator } from './orchestrator';
 import { CliOrchestrator } from './cliorch';
-import { TaskEngine } from './engine';
+import { TaskEngine, providersForRole, taskCapFor } from './engine';
 import { RunStore, SavedRun } from './runs';
 import { buildReport, loadStates } from './report';
 import { addSnapshot, readLedger, reconcile } from './ledger';
@@ -44,13 +44,13 @@ export function parseReport(report: string): { summary: string; done: string[]; 
 import * as git from './git';
 import { pick } from '../memory/lang';
 import { Alerts } from './alerts';
-import { freeOnlyReason, refreshFreeModels } from './freetier';
+import { freeOnlyReason, isFreeProvider, refreshFreeModels } from './freetier';
 import { listLocalModels, prepareOllamaContext } from './localmodels';
 import { Watchdog } from './watchdog';
 import { collectAttention, AttentionRun } from './attention';
 import { collectRecent } from './recent';
 import { pausedUntil } from './ratelimit';
-import { AppConfig, Health, OrchEvent, Plan, PlannerChoice, ROLES, RunState, Triage } from './types';
+import { AppConfig, Health, OrchEvent, Plan, PlannerChoice, ROLES, RunState, Triage, WorkerTask } from './types';
 import { ensureMemory } from '../memory/setup';
 import { execFile, execFileSync } from 'child_process';
 
@@ -702,12 +702,142 @@ export class Hub {
     });
   }
 
+  /** A saved run whose repo folder is gone: say so and touch nothing, so run.json is not marked merged/discarded without a real cleanup. */
+  private repoMissing(runId: string): string | null {
+    const repo = this.engineFor(runId).state.repo;
+    return fs.existsSync(repo) ? null : `Репозиторий не найден: ${repo}. Ничего не сделано: статус задачи не менялся.`;
+  }
+
   merge(runId: string, taskId: string) {
+    const missing = this.repoMissing(runId);
+    if (missing) return missing;
     return this.engineFor(runId).merge({ task_id: taskId });
   }
 
   discard(runId: string, taskId: string) {
+    const missing = this.repoMissing(runId);
+    if (missing) return missing;
     return this.engineFor(runId).discard({ task_id: taskId, force: true }); // a click in the panel is the owner's own decision
+  }
+
+  /** A task by run: from the live engine if the run is in memory, else from the saved run.json. */
+  private findTask(runId: string, taskId: string): { state: RunState; task: WorkerTask } | null {
+    const state = this.state(runId);
+    const task = state?.tasks.find((t) => t.id === taskId);
+    return state && task ? { state, task } : null;
+  }
+
+  /** Tasks being continued right now (`runId/taskId`): closes the window between two clicks, before the new task reaches any state. */
+  private continuing = new Set<string>();
+
+  /** The reference of a task that already continues `runId/taskId` in any live or saved run (or via `retriedAs` inside the same run), else null. */
+  private continuedBy(runId: string, taskId: string, old: WorkerTask): string | null {
+    const { engines, saved } = this.liveAndSaved(Date.now());
+    const states = [...[...engines.values()].map((e) => e.state), ...saved.map((x) => x.state as RunState)];
+    for (const s of states) {
+      for (const t of s.tasks) {
+        if (t.continuedFrom === `${runId}/${taskId}` || (s.runId === runId && t.continuedFrom === taskId)) return `${s.runId}/${t.id}`;
+      }
+    }
+    const own = states.find((s) => s.runId === runId);
+    if (old.retriedAs && own?.tasks.some((t) => t.id === old.retriedAs)) return `${runId}/${old.retriedAs}`;
+    return null;
+  }
+
+  /** Why a task cannot be continued from the panel, or null when it can: a question, a stop at the cost cap, or a task out of automatic retries. */
+  private notContinuable(t: WorkerTask): string | null {
+    if (t.status === 'merged' || t.status === 'discarded' || t.status === 'cancelled') return `задача уже ${t.status === 'merged' ? 'слита' : t.status === 'discarded' ? 'отброшена' : 'отменена'}`;
+    if (t.needsAnswer && t.status === 'done') return null;
+    if (t.capped) return null;
+    if (t.escalated && (t.status === 'failed' || t.status === 'timeout')) return null;
+    return `она не ждёт ответа, не остановлена по лимиту и не исчерпала автоповторы (статус ${t.status})`;
+  }
+
+  /**
+   * Continue a task from the panel: answer a worker's question, retry a task that is out of automatic retries on another worker,
+   * or go on after a stop at the cost cap. The new task is created in the repository's MCP session (its budget, its worker limits)
+   * and starts from the old task's branch, even when the old task belongs to another (saved or live) run.
+   * Never touches the old run: its item closes in attention() by the `continuedFrom` link. Never throws: a refusal is a Russian sentence.
+   */
+  async continueTask(runId: string, taskId: string, opts: { provider: string; text?: string; title?: string }): Promise<string> {
+    const found = this.findTask(runId, taskId);
+    if (!found) return 'Задача не найдена';
+    const { state, task: old } = found;
+    const why = this.notContinuable(old);
+    if (why) return `Эту задачу продолжить нельзя: ${why}.`;
+    const key = `${runId}/${taskId}`;
+    const done = this.continuedBy(runId, taskId, old);
+    if (done || this.continuing.has(key)) return `Эту задачу продолжить нельзя: уже продолжена (${done ?? key}).`;
+    this.continuing.add(key); // synchronously with the check: no await between them
+    try {
+      return await this.continueChecked(state, old, taskId, opts);
+    } finally {
+      this.continuing.delete(key);
+    }
+  }
+
+  private async continueChecked(state: RunState, old: WorkerTask, taskId: string, opts: { provider: string; text?: string; title?: string }): Promise<string> {
+    const text = (opts.text ?? '').trim();
+    const isQuestion = !!old.needsAnswer && old.status === 'done';
+    if (isQuestion && !text) return 'Эту задачу продолжить нельзя: нужен ответ воркеру (текст не может быть пустым).';
+    if (text.length > 4000) return 'Эту задачу продолжить нельзя: текст длиннее 4000 знаков.';
+    if (!fs.existsSync(state.repo) || !(await git.isRepo(state.repo))) return `Репозиторий не найден: ${state.repo}. Ничего не сделано.`;
+
+    const spec = isQuestion
+      ? `The owner answers your question («${old.needsAnswer}»): ${text}. Continue and finish the task.\n\nThe original task:\n${old.spec.slice(0, 6000)}`
+      : `${old.spec.slice(0, 6000)}${text ? `\n\nAdditional note from the owner:\n${text}` : ''}`;
+    const title = opts.title?.trim() || `${old.title} (продолжение)`;
+    const branchOk = !!old.branch && (await run('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${old.branch}`], state.repo)).code === 0;
+    const note = branchOk ? '' : ` Ветка ${old.branch} не найдена: задача начата с чистого листа, без правок предыдущей.`;
+    try {
+      const eng = await this.mcpSession(state.repo);
+      const base = { provider: opts.provider, role: old.role, title, spec };
+      let r: string;
+      if (!branchOk) r = eng.delegate({ ...base, linkFrom: `${state.runId}/${taskId}` }); // linked, so a second click is refused and the panel item closes
+      else if (eng.state.runId === state.runId) r = eng.delegate({ ...base, continueFrom: taskId });
+      else r = eng.delegate({ ...base, continueFromExternal: { ref: `${state.runId}/${taskId}`, branch: old.branch, baseSha: old.baseSha ?? '', error: old.error, result: old.result, lastLog: old.log?.[old.log.length - 1] } });
+      return r + note;
+    } catch (e: any) {
+      return `Не запущено: ${e?.message ?? e}`;
+    }
+  }
+
+  /** For the «continue» dialog: which workers may take the task's role, the caps and the default worker. null: no such task. */
+  continueOptions(runId: string, taskId: string) {
+    const found = this.findTask(runId, taskId);
+    if (!found) return null;
+    const cfg = this.config();
+    cfg.health = this.health;
+    const role = found.task.role ?? '';
+    // forceProvider routes every task to one worker (as in engine.delegate), whatever the role
+    const fp = cfg.forceProvider ? cfg.providers.find((p) => p.id === cfg.forceProvider && p.enabled && canWork(p)) : undefined;
+    const light = fp ? cfg.health?.[fp.id]?.light : undefined;
+    const forced = fp && light !== 'red' && light !== 'yellow' ? fp.id : null;
+    const providers = (forced ? [fp!] : providersForRole(cfg, role)).map((p) => ({ id: p.id, label: p.label, model: p.model, billing: p.billing ?? 'api', capUsd: p.maxUsdPerRun ?? 0, free: isFreeProvider(p) }));
+    return {
+      role,
+      providers,
+      forced,
+      taskCapUsd: taskCapFor(cfg, role || undefined),
+      runBudgetUsd: cfg.runBudgetUsd || 0,
+      defaultProvider: providers.find((p) => p.id === found.task.providerId)?.id ?? providers[0]?.id ?? null,
+    };
+  }
+
+  /** Diff of the task branch against its base (like get_diff), cut to 200 000 chars. Never throws: a problem comes back as a Russian sentence. */
+  async taskDiff(runId: string, taskId: string): Promise<string> {
+    try {
+      const eng = this.engineFor(runId);
+      const t = eng.mustTask(taskId);
+      if (!t.baseSha) return 'У задачи ещё нет изменений.';
+      if (!/^[0-9a-f]{7,40}$/.test(t.baseSha) || !t.branch || t.branch.startsWith('-')) return 'Не удалось получить diff: недопустимые данные задачи';
+      const r = await run('git', ['diff', '--end-of-options', `${t.baseSha}..${t.branch}`], eng.state.repo);
+      if (r.code !== 0) return `Не удалось получить diff: ветка ${t.branch} или репозиторий недоступны (${r.stderr.trim().split('\n')[0] || 'git завершился с ошибкой'}).`;
+      if (!r.stdout) return 'Изменений нет.';
+      return r.stdout.length > 200_000 ? r.stdout.slice(0, 200_000) + '\n…обрезано' : r.stdout;
+    } catch (e: any) {
+      return `Не удалось получить diff: ${e?.message ?? e}`;
+    }
   }
 
   /**

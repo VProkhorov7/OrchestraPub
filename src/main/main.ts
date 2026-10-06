@@ -118,7 +118,10 @@ ipcMain.handle('runs:delete', (_e, runId: string) => {
 ipcMain.handle('runs:resume', (_e, runId: string) => hub.resume(runId));
 
 ipcMain.handle('task:merge', (_e, runId: string, id: string) => hub.merge(runId, id));
+ipcMain.handle('task:diff', (_e, runId: string, id: string) => hub.taskDiff(runId, id));
 ipcMain.handle('task:discard', (_e, runId: string, id: string) => hub.discard(runId, id));
+ipcMain.handle('task:continue', (_e, runId: string, id: string, opts: { provider: string; text?: string; title?: string }) => hub.continueTask(runId, id, opts));
+ipcMain.handle('task:continueOptions', (_e, runId: string, id: string) => hub.continueOptions(runId, id));
 ipcMain.handle('task:openWorktree', async (_e, runId: string, id: string) => {
   const wt = hub.worktreeOf(runId, id);
   const r = await hub.openWorktree(runId, id, false); // finds out why it cannot be opened
