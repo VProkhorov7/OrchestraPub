@@ -34,6 +34,8 @@ export interface AttentionRun {
   spentByProvider: Record<string, number>;
   /** Held by a running engine. Spend is only reported for live runs: a finished run cannot get a bigger budget. */
   live: boolean;
+  /** Saved run whose repo path does not exist on disk: its «not merged» items say so instead of offering merge/discard. */
+  missingRepo?: string;
 }
 
 export interface AttentionInput {
@@ -78,7 +80,9 @@ export function collectAttention(input: AttentionInput): AttentionItem[] {
         items.push({ kind: 'decision', level: 'error', what: 'Задача не выполнена после автоповторов, нужно ваше решение', who, hint: 'выбрать: другой исполнитель, упростить бриф, сделать самому или отложить', ...at });
       } else if (t.status === 'done' && !closed(t) && input.unmergedWarnMinutes > 0 && t.finishedAt && now - t.finishedAt > input.unmergedWarnMinutes * 60_000) {
         const mins = Math.round((now - t.finishedAt) / 60_000);
-        items.push({ kind: 'unmerged', level: 'warn', what: `Готово ${mins} мин назад, но не слито`, who, hint: 'слить (merge) или отбросить (discard)', branch: t.branch, diffStat: t.diffStat, ...at });
+        const what = run.missingRepo ? `Готово ${mins} мин назад, но репозиторий не найден: ${run.missingRepo}` : `Готово ${mins} мин назад, но не слито`;
+        const hint = run.missingRepo ? 'поправить repo в run.json запуска или отбросить задачу вручную' : 'слить (merge) или отбросить (discard)';
+        items.push({ kind: 'unmerged', level: 'warn', what, who, hint, branch: t.branch, diffStat: t.diffStat, ...at });
       }
     }
 

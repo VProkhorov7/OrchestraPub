@@ -41,6 +41,12 @@ r = collectAttention(input([task('t01', { finishedAt: old, branch: 'orch/x-t01',
 check(r[0].branch === 'orch/x-t01' && r[0].diffStat === ' a.txt | 1 +', `unmerged carries branch and diffStat: ${JSON.stringify(r)}`);
 r = collectAttention(input([task('t01', { needsAnswer: 'q', branch: 'b', diffStat: 's' }), task('t02', { status: 'failed', escalated: true, branch: 'b', diffStat: 's' }), task('t03', { capped: true, branch: 'b', diffStat: 's' })]));
 check(r.length === 3 && r.every((x) => x.branch === undefined && x.diffStat === undefined), `other kinds have no branch/diffStat: ${JSON.stringify(r)}`);
+{
+  const i = input([task('t01', { finishedAt: old })]);
+  i.runs[0].missingRepo = '/no/such/repo';
+  r = collectAttention(i);
+  check(r.length === 1 && /репозиторий не найден: \/no\/such\/repo/.test(r[0].what) && !/слить/.test(r[0].hint), `missing repo is named: ${JSON.stringify(r)}`);
+}
 check(kinds(input([task('t01', { finishedAt: old })], { unmergedWarnMinutes: 0 })).length === 0, 'unmergedWarnMinutes=0 skips the unmerged item');
 check(kinds(input([task('t01', { finishedAt: old }), task('t02', { continuedFrom: 't01', status: 'running' })])).length === 0, 'a done task that was continued is not reported as unmerged');
 check(kinds(input([task('t01', { status: 'cancelled', capped: true })])).length === 0, 'a cancelled task is not reported');

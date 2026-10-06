@@ -219,7 +219,7 @@ export class Hub {
         const open = t.status !== 'merged' && t.status !== 'discarded' && t.status !== 'cancelled' && (t.status === 'done' || t.needsAnswer || t.capped || t.escalated);
         return this.closeByGit(s, t, !!open, now);
       });
-      runs.push({ runId: s.runId, tasks, budgetUsd: s.budgetUsd ?? 0, spentTotal: 0, spentByProvider: {}, live: false });
+      runs.push({ runId: s.runId, tasks, budgetUsd: s.budgetUsd ?? 0, spentTotal: 0, spentByProvider: {}, live: false, missingRepo: s.repo && !fs.existsSync(s.repo) ? s.repo : undefined });
     }
     return collectAttention({
       runs,
