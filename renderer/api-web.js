@@ -60,6 +60,7 @@
     doctorDiscover: (roots) => post('/api/doctor/discover', { roots }),
     tariff: () => get('/api/tariff'),
     attention: () => get('/api/attention'),
+    recent: () => get('/api/recent'),
     report: (days) => get('/api/report?days=' + enc(days)),
     ledger: () => get('/api/ledger'),
     ledgerSnapshot: (id, balance, unitUsd) => post('/api/ledger', { id, balance, unitUsd }),

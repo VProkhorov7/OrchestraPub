@@ -48,6 +48,7 @@ import { freeOnlyReason, refreshFreeModels } from './freetier';
 import { listLocalModels, prepareOllamaContext } from './localmodels';
 import { Watchdog } from './watchdog';
 import { collectAttention, AttentionRun } from './attention';
+import { collectRecent } from './recent';
 import { pausedUntil } from './ratelimit';
 import { AppConfig, Health, OrchEvent, Plan, PlannerChoice, ROLES, RunState, Triage } from './types';
 import { ensureMemory } from '../memory/setup';
@@ -155,8 +156,8 @@ export class Hub {
   }
 
   /** Saved runs whose run.json was touched within ATTENTION_MAX_RUN_AGE_MS; older ones are not even read. */
-  private savedStates(now: number): RunState[] {
-    const out: RunState[] = [];
+  private savedStates(now: number): { state: RunState; mtimeMs: number }[] {
+    const out: { state: RunState; mtimeMs: number }[] = [];
     let names: string[] = [];
     try {
       names = fs.readdirSync(this.runs.dir);
@@ -166,8 +167,9 @@ export class Hub {
     for (const n of names) {
       try {
         const f = path.join(this.runs.dir, n, 'run.json');
-        if (now - fs.statSync(f).mtimeMs > ATTENTION_MAX_RUN_AGE_MS) continue;
-        out.push(JSON.parse(fs.readFileSync(f, 'utf8')).state);
+        const mtimeMs = fs.statSync(f).mtimeMs;
+        if (now - mtimeMs > ATTENTION_MAX_RUN_AGE_MS) continue;
+        out.push({ state: JSON.parse(fs.readFileSync(f, 'utf8')).state, mtimeMs });
       } catch {
         /* unreadable run: skip */
       }
@@ -175,24 +177,47 @@ export class Hub {
     return out;
   }
 
-  /** «Требует вас»: what waits for the owner, from the live runs and the runs saved on disk (see attention.ts). */
-  attention() {
-    const cfg = this.config();
+  /** Live engines by runId plus the saved runs that are readable and not live (the live copy wins). */
+  private liveAndSaved(now: number) {
     const engines = new Map<string, TaskEngine>();
     for (const c of this.controllers.values()) engines.set(c.state.runId, c.engine);
     for (const m of this.mcp.values()) engines.set(m.engine.state.runId, m.engine);
+    const saved = this.savedStates(now).filter((x) => x.state?.runId && Array.isArray(x.state.tasks) && !engines.has(x.state.runId));
+    return { engines, saved };
+  }
+
+  /** A task of a saved run that `open` says is still open, but whose branch is gone or merged: a copy with status merged (the list keeps its length, `continuedFrom` links still work). */
+  private closeByGit(s: RunState, t: RunState['tasks'][number], open: boolean, now: number) {
+    return open && this.branchGone(s.repo, t.branch, s.baseBranch, now) ? { ...t, status: 'merged' as const } : t;
+  }
+
+  /** «Недавно завершено»: the last finished tasks of live and saved runs (see recent.ts). Saved «done» tasks with a gone or merged branch count as merged. */
+  recent() {
     const now = Date.now();
+    const { engines, saved } = this.liveAndSaved(now);
+    return collectRecent({
+      runs: [
+        ...[...engines.values()].map((e) => ({ runId: e.state.runId, tasks: e.state.tasks, touchedAt: now })),
+        ...saved.map(({ state, mtimeMs }) => ({ runId: state.runId, tasks: state.tasks.map((t) => this.closeByGit(state, t, t.status === 'done', now)), touchedAt: mtimeMs })),
+      ],
+      now,
+    });
+  }
+
+  /** «Требует вас»: what waits for the owner, from the live runs and the runs saved on disk (see attention.ts). */
+  attention() {
+    const cfg = this.config();
+    const now = Date.now();
+    const { engines, saved } = this.liveAndSaved(now);
     const runs: AttentionRun[] = [...engines.values()].map((e) => {
       const s = e.spent();
       return { runId: e.state.runId, tasks: e.state.tasks, budgetUsd: e.budget(), spentTotal: s.total, spentByProvider: s.byProvider, live: true };
     });
-    for (const s of this.savedStates(now)) {
-      if (!s?.runId || !Array.isArray(s.tasks) || engines.has(s.runId)) continue;
-      // A task that would give an item but whose branch is gone or merged is closed: shown to collectAttention as merged
-      // (kept in the list, so `continuedFrom` links of other tasks still work).
+    for (const { state: s } of saved) {
+      // A task that would give an item but whose branch is gone or merged is closed: shown to collectAttention as merged.
       const tasks = s.tasks.map((t) => {
         const open = t.status !== 'merged' && t.status !== 'discarded' && t.status !== 'cancelled' && (t.status === 'done' || t.needsAnswer || t.capped || t.escalated);
-        return open && this.branchGone(s.repo, t.branch, s.baseBranch, now) ? { ...t, status: 'merged' as const } : t;
+        return this.closeByGit(s, t, !!open, now);
       });
       runs.push({ runId: s.runId, tasks, budgetUsd: s.budgetUsd ?? 0, spentTotal: 0, spentByProvider: {}, live: false });
     }

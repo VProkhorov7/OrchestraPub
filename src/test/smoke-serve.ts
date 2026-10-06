@@ -96,6 +96,8 @@ function repoIn(tmp: string, name: string) {
   fs.writeFileSync(path.join(home, 'runs', 'broken', 'run.json'), '{oops');
   const at = await api('GET', '/api/attention');
   check(at.status === 200 && at.j.some((x: any) => x.kind === 'question' && x.runId === 'saved1') && !at.j.some((x: any) => x.kind === 'spend'), `GET /api/attention lists a saved, not live run (broken file skipped): ${JSON.stringify(at.j)}`);
+  const rc = await api('GET', '/api/recent');
+  check(rc.status === 200 && rc.j.some((x: any) => x.runId === 'saved1' && x.taskId === 't01' && x.status === 'done') && rc.j.length === 1, `GET /api/recent lists a saved run's done task (broken file skipped): ${JSON.stringify(rc.j)}`);
   const lg = await api('POST', '/api/ledger', { id: 'p', balance: 5, unitUsd: 2 });
   check(lg.status === 200 && lg.j.find((x: any) => x.id === 'p')?.last.balance === 5, 'POST /api/ledger records a balance');
 

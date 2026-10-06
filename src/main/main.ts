@@ -101,6 +101,7 @@ ipcMain.handle('doctor:projects', async (_e, projects: string[], roots?: string[
 ipcMain.handle('doctor:discover', (_e, roots: string[]) => discoverProjects(roots));
 ipcMain.handle('tariff:get', () => hub.tariff());
 ipcMain.handle('attention:get', () => hub.attention());
+ipcMain.handle('recent:get', () => hub.recent());
 ipcMain.handle('report:get', (_e, days: number) => hub.report(Math.min(90, Math.max(1, Number(days) || 3))));
 ipcMain.handle('ledger:get', () => hub.ledger());
 ipcMain.handle('ledger:snapshot', (_e, id: string, balance?: number, unitUsd?: number) => hub.snapshot(String(id), balance, unitUsd));

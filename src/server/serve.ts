@@ -293,6 +293,8 @@ export async function serve(opts: ServeOptions = {}) {
         return json(res, 200, hub.alerts.list());
       case 'GET /attention':
         return json(res, 200, hub.attention());
+      case 'GET /recent':
+        return json(res, 200, hub.recent());
       case 'POST /alerts/clear':
         hub.alerts.clearAll();
         return json(res, 200, { ok: true });

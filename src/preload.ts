@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('orch', {
   doctorDiscover: (roots: string[]) => ipcRenderer.invoke('doctor:discover', roots),
   tariff: () => ipcRenderer.invoke('tariff:get'),
   attention: () => ipcRenderer.invoke('attention:get'),
+  recent: () => ipcRenderer.invoke('recent:get'),
   report: (days: number) => ipcRenderer.invoke('report:get', days),
   ledger: () => ipcRenderer.invoke('ledger:get'),
   ledgerSnapshot: (id: string, balance?: number, unitUsd?: number) => ipcRenderer.invoke('ledger:snapshot', id, balance, unitUsd),

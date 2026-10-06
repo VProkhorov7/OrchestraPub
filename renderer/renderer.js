@@ -284,6 +284,7 @@ orch.onEvent((ev) => {
   window.ovEvent?.(ev);
   window.alertEvent?.(ev);
   window.attentionEvent?.(ev);
+  window.recentEvent?.(ev);
   window.activityEvent?.(ev);
   if (ev.type === 'toast') {
     if (!ev.runId || ev.runId === state.watch || ev.level === 'error') toast(ev.text, ev.level);
