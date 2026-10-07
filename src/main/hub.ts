@@ -84,6 +84,8 @@ interface Pending {
 interface McpSession {
   engine: TaskEngine;
   lastUsed: number;
+  /** Restored at service start and not yet touched by the agent: an idle close keeps it «interrupted». */
+  fromStart?: boolean;
 }
 
 const MCP_IDLE_MS = 2 * 60 * 60_000;
@@ -237,13 +239,21 @@ export class Hub {
 
   /** Startup: stale "running" runs become "interrupted"; check connections. */
   private scheduleTimer?: NodeJS.Timeout;
+  private startRestore: Promise<void> = Promise.resolve();
+  private restoring = new Map<string, Promise<TaskEngine | null>>();
 
-  init() {
+  /** Resolves when the start-up restore of MCP sessions has finished. */
+  whenStartRestored(): Promise<void> {
+    return this.startRestore;
+  }
+
+  init(opts?: { restoreMcp?: boolean }) {
     this.watchdog.start();
     this.scheduleTimer = setInterval(() => this.tickSchedule().catch(() => {}), 60_000);
     this.scheduleTimer.unref();
     setTimeout(() => this.tickSchedule().catch(() => {}), 3_000).unref();
     this.runs.markInterrupted((s) => s.pid !== process.pid && pidAlive(s.pid));
+    if (opts?.restoreMcp) this.startRestore = this.restoreMcpSessionsOnStart().catch(() => {});
     this.refreshHealth().catch(() => {});
     this.recheckTimer = setInterval(() => this.recheckBad().catch(() => {}), 120_000);
     this.recheckTimer.unref();
@@ -949,12 +959,26 @@ export class Hub {
     const hit = this.mcp.get(key);
     if (hit && hit.engine.state.status === 'running') {
       hit.lastUsed = Date.now();
+      hit.fromStart = false;
       return hit.engine;
     }
     if (!(await git.isRepo(key))) throw new Error(`${key} не git-репозиторий. Укажите ?repo=<путь> в адресе MCP-сервера.`);
+    const again = this.mcp.get(key); // the start-up restore may have finished while we checked the repo
+    if (again && again.engine.state.status === 'running') {
+      again.lastUsed = Date.now();
+      again.fromStart = false;
+      return again.engine;
+    }
     this.autoMemory(key);
     const restored = await this.restoreMcpSession(key);
-    if (restored) return restored;
+    if (restored) {
+      const m = this.mcp.get(key);
+      if (m) {
+        m.lastUsed = Date.now();
+        m.fromStart = false;
+      }
+      return restored;
+    }
     const cfg = this.config();
     cfg.health = this.health;
     const state: RunState = {
@@ -981,7 +1005,21 @@ export class Hub {
   }
 
   /** After a service restart, the newest interrupted MCP session for this repo (if any) is restored. */
-  private async restoreMcpSession(key: string): Promise<TaskEngine | null> {
+  private restoreMcpSession(key: string, fromStart = false): Promise<TaskEngine | null> {
+    const running = this.restoring.get(key);
+    if (running) return running;
+    const p = this.restoreMcpSessionOnce(key)
+      .then((eng) => {
+        const m = this.mcp.get(key);
+        if (eng && m && fromStart) m.fromStart = true;
+        return eng;
+      })
+      .finally(() => this.restoring.delete(key));
+    this.restoring.set(key, p);
+    return p;
+  }
+
+  private async restoreMcpSessionOnce(key: string): Promise<TaskEngine | null> {
     const cutoff = Date.now() - 24 * 3600_000;
     for (const r of this.runs.list()) {
       if (r.source !== 'mcp' || path.resolve(r.repo) !== key || !r.startedAt || r.startedAt < cutoff) continue;
@@ -998,6 +1036,20 @@ export class Hub {
       return this.resumeMcpSession(s, key);
     }
     return null;
+  }
+
+  /** At service start, restore the interrupted MCP sessions at once, so the panel shows them before the agent's first call. Starts no worker. */
+  private async restoreMcpSessionsOnStart(): Promise<void> {
+    const repos = new Set<string>();
+    for (const r of this.runs.list()) if (r.source === 'mcp' && r.repo) repos.add(path.resolve(r.repo));
+    for (const key of repos) {
+      try {
+        if (this.mcp.get(key)?.engine.state.status === 'running') continue;
+        if (!fs.existsSync(key) || !(await git.isRepo(key))) continue;
+        if (this.mcp.get(key)?.engine.state.status === 'running') continue;
+        await this.restoreMcpSession(key, true);
+      } catch {}
+    }
   }
 
   /** Reuse the saved session's state: mark it running, reconcile mid-flight tasks, and open it. */
@@ -1038,7 +1090,7 @@ export class Hub {
     const s = m.engine.state;
     const open = s.tasks.some((t) => t.status === 'queued' || t.status === 'running');
     if (open) m.engine.cancelAll();
-    s.status = open ? 'interrupted' : 'done';
+    s.status = open || m.fromStart ? 'interrupted' : 'done';
     s.finishedAt = Date.now();
     if (s.tasks.length) {
       this.runs.saveSoon(s.runId, () => ({ version: 1, state: s, messages: [], savedAt: Date.now() }), 0);

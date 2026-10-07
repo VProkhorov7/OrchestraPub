@@ -113,7 +113,7 @@ A 429 / quota / «free-models-per-day» answer is a pause of that connection, no
 
 Every run is saved to `<userData>/runs/<runId>/run.json` as it goes: tasks, logs, diffs, spend and the orchestrator's whole conversation. The **История** tab lists runs; «Открыть» shows a saved run read-only, «Продолжить» resumes one that was interrupted, failed, cancelled or stopped by the budget.
 
-Quitting the app mid-run kills the workers but keeps their worktrees. On resume, unfinished tasks are committed as they are and handed to the orchestrator as partial diffs to review, the tool calls that never got answers are answered with "interrupted", and Claude continues from the same point in the conversation. Resume needs the repo on the same branch and clean; the budget is taken from current Settings, so you can raise it before continuing.
+Quitting the app mid-run kills the workers but keeps their worktrees. On resume, unfinished tasks are committed as they are and handed to the orchestrator as partial diffs to review, the tool calls that never got answers are answered with "interrupted", and Claude continues from the same point in the conversation. Resume needs the repo on the same branch and clean; the budget is taken from current Settings, so you can raise it before continuing. At service start `Hub.init()` also restores the interrupted MCP sessions (`restoreMcpSessionsOnStart`, one per repo, same rules as the lazy `restoreMcpSession`: younger than 24 h, dead pid, unmerged tasks; repo folder must exist and be a git repo), so the panel shows them before the agent's first call; it starts no worker and spends nothing, and only the idle close (`MCP_IDLE_MS`) ends such a session. Test: `smoke-restore`.
 
 ## Spend and budgets
 

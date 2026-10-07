@@ -143,7 +143,7 @@ export async function serve(opts: ServeOptions = {}) {
     const line = `data: ${JSON.stringify(ev)}\n\n`;
     for (const c of clients) c.write(line);
   });
-  hub.init();
+  hub.init({ restoreMcp: true });
   const cfg = hub.config();
   const host = opts.host ?? cfg.serve.host;
   const port = opts.port ?? cfg.serve.port;

@@ -223,6 +223,76 @@ if(argv.includes('SLOW_COMMIT')) {
   const restoreNotes = eng3e.state.transcript.filter((x) => x.text.includes('Сессия восстановлена'));
   check(restoreNotes.length === 2, `one restore note per restart, got ${restoreNotes.length}`);
 
+  // (f): at service start the interrupted sessions are restored without any mcpSession() call.
+  const homeF = path.join(tmp, 'homeF');
+  fs.mkdirSync(homeF);
+  fs.writeFileSync(path.join(homeF, 'config.json'), JSON.stringify(testConfig(claudePath)));
+  const storeF = new RunStore(path.join(homeF, 'runs'));
+  const mkRunF = (runId: string, repo: string, over: Partial<RunState>) => {
+    const state: RunState = {
+      runId,
+      source: 'mcp',
+      repo,
+      baseBranch: 'main',
+      goal: 'MCP-сессия',
+      status: 'interrupted',
+      tasks: [{ id: 't01', title: 'T', providerId: 'deepseek', model: 'deepseek-v4-pro', spec: 'x', role: 'docs', status: 'done', branch: `orch/${runId}-t01-t`, worktree: path.join(tmp, 'wt', runId, 't01'), baseSha: '', createdAt: 0, log: [] }],
+      transcript: [],
+      startedAt: Date.now() - 3600_000,
+      pid: process.pid,
+      ...over,
+    };
+    storeF.write({ version: 1, state, messages: [], savedAt: Date.now() });
+  };
+  const repoF1 = repoIn('f1');
+  const repoF2 = repoIn('f2');
+  const repoF3 = repoIn('f3');
+  mkRunF('mcp-start', repoF1, {});
+  mkRunF('mcp-start-old', repoF2, { startedAt: Date.now() - 25 * 3600_000 });
+  mkRunF('mcp-start-merged', repoF3, { tasks: [{ id: 't01', title: 'T', providerId: 'deepseek', model: 'deepseek-v4-pro', spec: 'x', role: 'docs', status: 'merged', branch: 'orch/x-t01-t', worktree: path.join(tmp, 'wt', 'mcp-start-merged', 't01'), baseSha: '', createdAt: 0, log: [] }] });
+  mkRunF('mcp-start-gone', path.join(tmp, 'no-such-repo'), {});
+  const repoF4 = repoIn('f4');
+  mkRunF('mcp-start-idle', repoF4, { tasks: [
+    { id: 't01', title: 'T', providerId: 'deepseek', model: 'deepseek-v4-pro', spec: 'x', role: 'docs', status: 'done', branch: 'orch/mcp-start-idle-t01-t', worktree: path.join(tmp, 'wt', 'mcp-start-idle', 't01'), baseSha: '', createdAt: 0, log: [] },
+    { id: 't02', title: 'Q', providerId: 'deepseek', model: 'deepseek-v4-pro', spec: 'x', role: 'docs', status: 'queued', branch: 'orch/mcp-start-idle-t02-q', worktree: path.join(tmp, 'wt', 'mcp-start-idle', 't02'), baseSha: '', createdAt: 0, log: [] },
+  ] });
+  // plain init(): the Electron app must not claim sessions
+  const hubP = new Hub(homeF, () => {});
+  hubP.init();
+  await hubP.whenStartRestored();
+  await sleep(300);
+  check(hubP.liveEngines().length === 0, 'plain init(): restores nothing');
+  hubP.stop();
+
+  const hubF = new Hub(homeF, () => {});
+  hubF.init({ restoreMcp: true });
+  // race: the agent's first call comes while the start-up restore is running
+  const raced = await hubF.mcpSession(repoF1);
+  await hubF.whenStartRestored();
+  const liveIds = hubF.liveEngines().map((e) => e.state.runId);
+  check(liveIds.filter((x) => x === 'mcp-start').length === 1, 'start: interrupted MCP session is live: ' + liveIds.join(','));
+  check(raced.state.runId === 'mcp-start' && hubF.liveEngines().find((e) => e.state.runId === 'mcp-start') === raced, 'race: mcpSession got the restored engine');
+  check(raced.state.transcript.filter((x) => x.text.includes('Сессия восстановлена')).length === 1, 'race: exactly one restore note');
+  check(!liveIds.includes('mcp-start-old'), 'start: 24h-old session not restored');
+  check(!liveIds.includes('mcp-start-merged'), 'start: all-merged session not restored');
+  check(!liveIds.includes('mcp-start-gone'), 'start: missing repo not restored, no throw');
+  check(raced.state.status === 'running' && raced.state.tasks.every((t) => t.status === 'done'), 'start: restored session starts no worker');
+
+  // idle close of a start-restored session nobody used keeps it interrupted
+  const engI = hubF.liveEngines().find((e) => e.state.runId === 'mcp-start-idle')!;
+  check(!!engI, 'start: idle session restored');
+  check(engI.state.tasks.find((t) => t.id === 't02')!.status === 'failed', 'start: queued task is failed by reconcile, not started');
+  (hubF as any).closeMcp(path.resolve(repoF4), (hubF as any).mcp.get(path.resolve(repoF4)));
+  check(new RunStore(path.join(homeF, 'runs')).load('mcp-start-idle').state.status === 'interrupted', 'idle: untouched start-restored session saved as interrupted');
+  hubF.stop();
+
+  // two restores of the same repo at once share one promise: one engine, one note
+  const hubR = new Hub(homeF, () => {});
+  hubR.init();
+  const [r1, r2] = await Promise.all([(hubR as any).restoreMcpSession(path.resolve(repoF4)), (hubR as any).restoreMcpSession(path.resolve(repoF4))]);
+  check(!!r1 && r1 === r2, 'race: concurrent restores return the same engine');
+  hubR.stop();
+
   console.log('\nSMOKE-RESTORE OK', tmp);
   process.exit(0);
 })().catch((e) => {
