@@ -7,11 +7,15 @@ import { DEFAULT_CONFIG } from '../main/config';
 import { fromPreset } from '../main/catalog';
 import { AppConfig } from '../main/types';
 
+const tmpdirs: string[] = [];
+process.on('exit', (code) => { if (code === 0 && !process.env.ORCHESTRA_KEEP_TMP) tmpdirs.forEach((d) => { try { fs.rmSync(d, { recursive: true, force: true }); } catch { } }); });
+
 export function tmpdir(prefix: string) {
   // realpath: on macOS /var is a link to /private/var, and git reports the real path.
   const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
   // Keep worker homes etc. out of the real user folder.
   process.env.ORCHESTRA_HOME ??= path.join(d, 'orchestra-home');
+  tmpdirs.push(d);
   return d;
 }
 
@@ -121,6 +125,7 @@ export function check(c: boolean, m: string) {
  */
 export function isolateCodexbar(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'orch-codexbar-'));
+  tmpdirs.push(dir);
   const stub = path.join(dir, 'codexbar');
   fs.writeFileSync(stub, '#!/bin/sh\necho \'[]\'\n');
   fs.chmodSync(stub, 0o755);

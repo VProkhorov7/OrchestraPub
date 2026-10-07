@@ -13,6 +13,7 @@ import { Alert } from '../main/types';
 import { tmpdir, check } from './helpers';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const waitFor = async (cond: () => boolean, ms = 8000) => { const end = Date.now() + ms; while (!cond() && Date.now() < end) await sleep(50); };
 
 (async () => {
   const tmp = tmpdir('orch-alerts-');
@@ -32,7 +33,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   t += 11 * 60_000;
   check(alerts.raise({ key: 'k', level: 'error', title: 'Boom', text: 'x' }) !== null, 'after the cool-down it is raised again');
   alerts.raise({ key: 'w', level: 'warn', title: 'Careful', text: 'y' });
-  await sleep(1500);
+  await waitFor(() => notified().length >= 2);
+  await sleep(300);
   check(notified().length === 2 && notified().every((l) => l.startsWith('error|Boom')), `macOS notifier only for errors: ${notified().join(' / ')}`);
   check(readAlerts(path.join(tmp, 'alerts.json')).length === 3 && emitted.length === 3, 'alerts are stored (newest first) and emitted');
   alerts.clear('k', 'Fine again', 'ok');
