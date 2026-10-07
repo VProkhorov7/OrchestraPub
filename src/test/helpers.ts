@@ -8,7 +8,8 @@ import { fromPreset } from '../main/catalog';
 import { AppConfig } from '../main/types';
 
 export function tmpdir(prefix: string) {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  // realpath: on macOS /var is a link to /private/var, and git reports the real path.
+  const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
   // Keep worker homes etc. out of the real user folder.
   process.env.ORCHESTRA_HOME ??= path.join(d, 'orchestra-home');
   return d;

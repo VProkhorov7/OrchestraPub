@@ -38,6 +38,10 @@ save('rold', { repo, tasks: [t('t05', 'orch/open')] }, 31);
 const items = () => hub.attention().filter((i) => i.kind === 'unmerged').map((i) => i.taskId);
 const got = items().sort().join();
 check(got === 't01,t04', `open branch and unreachable repo stay; merged, missing branch and 31-day-old run are dropped: ${got}`);
+const t04 = hub.attention().find((i) => i.kind === 'unmerged' && i.taskId === 't04');
+check(!!(t04 && t04.what.match(/репозиторий не найден: /) && t04.what.includes(path.join(root, 'no-such-repo')) && !t04.hint.match(/слить/)), 't04 unmerged item has missing repo text and no merge hint');
+const t01 = hub.attention().find((i) => i.kind === 'unmerged' && i.taskId === 't01');
+check(!!(t01 && t01.what.match(/но не слито/) && !t01.what.match(/репозиторий не найден/)), 't01 unmerged item has unmerged text and no missing repo text');
 check(hub.attention().every((i) => i.kind !== 'spend'), 'no spend items for saved runs');
 
 // the answer is cached: a branch deleted right now is still reported until the cache expires
