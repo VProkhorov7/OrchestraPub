@@ -31,6 +31,8 @@ npm install
 npm start          # builds TypeScript and launches the app
 npm run smoke      # offline end-to-end tests with a fake claude and fake API (no keys needed):
                    #   main flow, resume after quit, budget stop, MCP server over stdio
+                   #   a passing test deletes its temp folders (os.tmpdir()/orch-*); a failing one keeps them for inspection;
+                   #   ORCHESTRA_KEEP_TMP=1 keeps them always. Tests that start a fake service (smoke-doctor) stop it on any exit.
 npm run dist       # package with electron-builder (dmg / AppImage / nsis)
 ```
 

@@ -78,6 +78,12 @@ process.exit(0);
   );
   fs.chmodSync(path.join(bin, 'launchctl'), 0o755);
   fs.chmodSync(path.join(bin, 'claude'), 0o755);
+  // However the test ends (a failed check too), the fake launchd's service must not stay alive: first in line, before tmpdir cleanup removes the pid file.
+  process.prependListener('exit', () => {
+    try {
+      process.kill(+fs.readFileSync(state, 'utf8'), 'SIGTERM');
+    } catch {}
+  });
   fs.writeFileSync(path.join(bin, 'orchestra-memory'), '#!/bin/sh\n');
   fs.chmodSync(path.join(bin, 'orchestra-memory'), 0o755);
 
