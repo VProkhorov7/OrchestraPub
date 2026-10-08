@@ -212,6 +212,8 @@ export interface WorkerTask {
   /** Automatic retries: the first task of a job is its jobId; every retry is a new task with attempt + 1. */
   jobId?: string;
   attempt?: number;
+  /** Started by the owner from the panel: never restarted automatically, a failure goes straight to the owner. */
+  noAutoRetry?: boolean;
   /** Last sign of life from the worker (a log line or usage): a silent cost counter alone is no sign of a hang. */
   lastActivityAt?: number;
   retryOf?: string;

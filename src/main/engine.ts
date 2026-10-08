@@ -178,7 +178,7 @@ export class TaskEngine {
     return providersForRole(this.cfg, role);
   }
 
-  delegate(input: { provider: string; role?: string; title: string; spec: string; continueFrom?: string; continueFromExternal?: ExternalPrev; linkFrom?: string; retry?: { of: string; jobId: string; attempt: number } }): string {
+  delegate(input: { provider: string; role?: string; title: string; spec: string; continueFrom?: string; continueFromExternal?: ExternalPrev; linkFrom?: string; noAutoRetry?: boolean; retry?: { of: string; jobId: string; attempt: number } }): string {
     if (this.cancelled) throw new Error('run is cancelled');
     if (this.budgetExhausted || (this.budget() > 0 && this.budgetUsed() >= 1))
       throw new Error(`run budget exhausted (${this.spendReport()}). Do not delegate; merge or discard finished tasks and finish.`);
@@ -265,6 +265,7 @@ export class TaskEngine {
       baseSha: '',
       createdAt: Date.now(),
       jobId: input.retry?.jobId ?? id,
+      noAutoRetry: input.noAutoRetry,
       attempt: input.retry?.attempt ?? 1,
       retryOf: input.retry?.of,
       log: [],
@@ -487,11 +488,12 @@ export class TaskEngine {
     if (!['failed', 'timeout'].includes(task.status) || this.cancelled || this.budgetExhausted || this.frozen) return;
     if (/превышен лимит|исчерпан бюджет/.test(task.error ?? '')) return; // stopped on purpose by a cap
     const noWorktree = !!task.continuedFrom && !task.startedAt; // the branch it continues vanished: a clean-sheet retry would spend money against the owner's intent, so ask the owner
-    if (task.rateLimited) return this.afterRateLimit(task);
+    const manual = !!task.noAutoRetry; // started by one owner click: one paid attempt, no restart of any kind
+    if (task.rateLimited && !manual) return this.afterRateLimit(task);
     const max = this.cfg.autoRetry ?? 3;
     const attempt = task.attempt ?? 1;
     const L = this.cfg.language;
-    if (attempt <= max && !noWorktree) {
+    if (attempt <= max && !noWorktree && !manual) {
       const p = this.retryProvider(task);
       if (p) {
         try {

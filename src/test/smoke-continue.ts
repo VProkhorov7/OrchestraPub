@@ -172,6 +172,37 @@ const settle = async (want: () => boolean, ms = 60_000) => {
   check(eng.state.tasks[nt].escalated === true && !!eng.state.tasks[nt].question, 'vanished branch: escalated to the owner with a question');
   check(hub.attention().some((i) => i.kind === 'decision' && i.runId === eng.state.runId && i.taskId === eng.state.tasks[nt].id), 'vanished branch: a «decision» item is shown');
 
+  // ---- money: a task started by one owner click never retries automatically; a normal task still does ----
+  process.env.FAKE_FAIL_ALL = '1';
+  save('fail', { repo, tasks: [savedTask('t01', { escalated: true, status: 'failed' })] });
+  const nf = eng.state.tasks.length;
+  s = await r('fail', 't01', { provider: 'deepseek' });
+  check(/^started /.test(s), `failing continuation: started: ${s}`);
+  await settle(() => eng.state.tasks[nf].status === 'failed');
+  await sleep(1000);
+  check(eng.state.tasks.length === nf + 1 && !eng.state.tasks[nf].retriedAs, `continued task fails: no automatic retry: ${eng.state.tasks.length} vs ${nf + 1}`);
+  check(eng.state.tasks[nf].escalated === true && !!eng.state.tasks[nf].question, 'continued task fails: escalated to the owner');
+  check(hub.attention().some((i) => i.kind === 'decision' && i.runId === eng.state.runId && i.taskId === eng.state.tasks[nf].id), 'continued task fails: a «decision» item is shown');
+  eng.delegate({ provider: 'deepseek', role: 'docs', title: 'Plain', spec: 'x' });
+  await settle(() => eng.state.tasks.length > nf + 1 && !!eng.state.tasks[nf + 1].retriedAs);
+  check(!!eng.state.tasks[nf + 1].retriedAs && eng.state.tasks.length > nf + 2, `normal task fails: still retried automatically: ${eng.state.tasks[nf + 1].retriedAs}`);
+  await settle(() => eng.state.tasks.every((t) => t.status !== 'running' && t.status !== 'queued'));
+  delete process.env.FAKE_FAIL_ALL;
+
+  // a continuation that gets a 429 is not moved to another worker either: one click, one paid attempt
+  process.env.FAKE_RATE_LIMIT_URL = 'deepseek';
+  save('rl', { repo, tasks: [savedTask('t01', { escalated: true, status: 'failed' })] });
+  const nr = eng.state.tasks.length;
+  s = await r('rl', 't01', { provider: 'deepseek' });
+  check(/^started /.test(s), `rate-limited continuation: started: ${s}`);
+  await settle(() => eng.state.tasks[nr].status === 'failed');
+  await sleep(1000);
+  check(eng.state.tasks.length === nr + 1 && !eng.state.tasks[nr].retriedAs, `continued task gets a 429: no retry, no extra task: ${eng.state.tasks.length} vs ${nr + 1}`);
+  check(eng.state.tasks[nr].escalated === true, 'continued task gets a 429: escalated to the owner');
+  check(hub.attention().some((i) => i.kind === 'decision' && i.runId === eng.state.runId && i.taskId === eng.state.tasks[nr].id), 'continued task gets a 429: a «decision» item is shown');
+  delete process.env.FAKE_RATE_LIMIT_URL;
+  clearPauses();
+
   // ---- (d) continue-options ----
   check(hub.continueOptions('saved', 'nope') === null, 'options: unknown task → null');
   let o = hub.continueOptions('saved', 't01')!;

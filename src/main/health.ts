@@ -73,6 +73,9 @@ async function checkApi(p: ProviderConfig, cfg: AppConfig): Promise<Health> {
   }
   if (p.preset === 'deepseek' && h.light !== 'red') h = await withDeepseekBalance(key, h, base);
   if (p.billing === 'plan') h.details = [...(h.details ?? []), 'coding-план: расход в кредитах плана, не в долларах'];
+  if (p.baseUrl && p.billing !== 'plan' && (typeof p.priceIn !== 'number' || typeof p.priceOut !== 'number')) {
+    h.details = [...(h.details ?? []), 'цены не заданы: лимит и расход считаются по оценке (тарифы Anthropic)'];
+  }
   return h;
 }
 

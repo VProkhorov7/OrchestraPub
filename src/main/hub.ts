@@ -801,7 +801,7 @@ export class Hub {
     const note = branchOk ? '' : ` Ветка ${old.branch} не найдена: задача начата с чистого листа, без правок предыдущей.`;
     try {
       const eng = await this.mcpSession(state.repo);
-      const base = { provider: opts.provider, role: old.role, title, spec };
+      const base = { provider: opts.provider, role: old.role, title, spec, noAutoRetry: true }; // one click, one paid attempt
       let r: string;
       if (!branchOk) r = eng.delegate({ ...base, linkFrom: `${state.runId}/${taskId}` }); // linked, so a second click is refused and the panel item closes
       else if (eng.state.runId === state.runId) r = eng.delegate({ ...base, continueFrom: taskId });
