@@ -413,7 +413,9 @@ export class TaskEngine {
       if (task.status === 'discarded') return; // thrown away while it was still working: its folder and branch are gone
 
       task.result = r.result;
-      charge(r.usage, r.reportedCostUsd);
+      // A worker killed before its final report (cap stop, timeout) has no real usage: keep the running estimate instead of zeroing the cost.
+      const noUsage = r.usage.input + r.usage.output + r.usage.cacheRead + r.usage.cacheWrite === 0;
+      if (!(noUsage && task.costEstimated && (task.costUsd ?? 0) > 0)) charge(r.usage, r.reportedCostUsd);
       await this.captureDiff(task);
       task.finishedAt = Date.now();
 

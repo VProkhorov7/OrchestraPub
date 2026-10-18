@@ -14,7 +14,7 @@ import { makeFakeClaude, makeRepo, testConfig, tmpdir, check } from './helpers';
   fs.mkdirSync(path.join(tmp, 'r'), { recursive: true });
   const repo = makeRepo(path.join(tmp, 'r'));
   const state: RunState = { runId: 'mcp-cap', source: 'mcp', repo, baseBranch: 'main', goal: 'cap', status: 'running', tasks: [], transcript: [], budgetUsd: 0, startedAt: Date.now(), pid: process.pid };
-  const e = new TaskEngine(testConfig(claudePath, { language: 'en', taskCapUsd: { refactor: 0.01 } }), path.join(tmp, 'wt'), state, () => {});
+  const e = new TaskEngine(testConfig(claudePath, { language: 'en', taskCapUsd: { refactor: 0.01, tests: 0.0005 } }), path.join(tmp, 'wt'), state, () => {});
   const settle = async (want: () => boolean, ms = 60_000) => {
     const t0 = Date.now();
     while (Date.now() - t0 < ms && !want()) await new Promise((r) => setTimeout(r, 200));
@@ -30,14 +30,23 @@ import { makeFakeClaude, makeRepo, testConfig, tmpdir, check } from './helpers';
   check(e.state.tasks.length === 1, 'a capped task is not retried');
   check(/STOPPED AT A SPEND CAP/.test(e.briefStatus(t1)) && /continue_from="t01"/.test(e.briefStatus(t1)), 'the orchestrator is told to keep and continue it');
 
+  // a provider that reports no usage at all: the cap still stops it, and the estimated cost is not zeroed afterwards
+  process.env.FAKE_SLOW_MS = '5000';
+  process.env.FAKE_NO_USAGE = '1';
+  e.delegate({ provider: 'deepseek', role: 'tests', title: 'No usage', spec: 'Change hello.txt' });
+  await settle(() => e.state.tasks.length === 2 && e.state.tasks[1].status === 'failed');
+  const tn = e.state.tasks[1];
+  check(tn.capped === true && (tn.costUsd ?? 0) > 0, `a capped task without reported usage keeps its estimated cost: $${tn.costUsd}`);
+  delete process.env.FAKE_NO_USAGE;
+
   // continue it with another role (no tight cap): starts from the first branch and finishes
   delete process.env.FAKE_SLOW_MS;
   let threw = '';
   try { e.delegate({ provider: 'deepseek', role: 'docs', title: 'x', spec: 'y', continueFrom: 'nope' }); } catch (x: any) { threw = x.message; }
   check(/nope/.test(threw), 'continuing an unknown task is refused');
   e.delegate({ provider: 'deepseek', role: 'docs', title: 'Edit hello (continued)', spec: 'Change hello.txt', continueFrom: 't01' });
-  await settle(() => e.state.tasks.length === 2 && e.state.tasks[1].status === 'done');
-  const t2 = e.state.tasks[1];
+  await settle(() => e.state.tasks.length === 3 && e.state.tasks[2].status === 'done');
+  const t2 = e.state.tasks[2];
   check(t2.continuedFrom === 't01' && t2.status === 'done', `the continuation runs and finishes: ${t2.status}`);
   check(/CONTINUATION/.test(t2.spec) && /Change hello\.txt/.test(t2.spec), 'its brief says it is a continuation and keeps the task');
   console.log('SMOKE-TASKCAP OK');

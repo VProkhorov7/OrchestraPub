@@ -94,6 +94,8 @@ Each worker has **role switches** in Settings (Новая функциональ
 
 **Распределить автоматически** makes one planning call to Claude: it reads the goal (plus anything attached with «Прикрепить задание») and the file tree, and returns a plan — tasks with role, worker, brief, dependencies and a one-line reason. The plan opens in the «План» tab where you can retitle tasks, change the role or worker, edit the brief or drop a task. «Запустить по плану» starts the orchestrator with that plan as a strong recommendation; it may still split, reassign after failures or add fix tasks, and says why when it does. «Запустить» without a plan works as before: Claude decides on the fly.
 
+Cost of a killed worker: a provider that sends no token usage until the final report (Devstral via OpenRouter) is costed by an estimate while it works. If the worker is stopped by a cap or a timeout before that report, `TaskEngine.execute` keeps the estimate instead of overwriting it with zero usage (test: `src/test/smoke-taskcap.ts`).
+
 ## Worker questions
 
 A worker cannot wait for an answer, so it ends its final message with `NEEDS_ANSWER: <question>` (worker prompt rule). `src/main/waiting.ts` `findQuestion` reads that marker (fallback: the old guess from the last log line); the task stays `done` but gets `needsAnswer` / `needsAnswerExplicit`.
