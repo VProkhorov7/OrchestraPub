@@ -93,7 +93,10 @@ export interface Session {
   /** Claude Code session id when started by a hook. */
   agentSession?: string;
   remindedAt?: string;
+  stopBlockedAt?: string;
   wikiTouched?: boolean;
+  /** Files already dirty when the session began → content hash; only a different hash counts as this session's work. */
+  baseline?: Record<string, string>;
 }
 
 /** Work an agent records by hand must say why (a journal without «why» is a list of events). */
@@ -415,7 +418,7 @@ export class ProjectMemory {
   sessionStart(author: string, goal?: string, agentSession?: string): Session {
     const cur = this.session();
     if (cur) return cur;
-    const s: Session = { id: `S-${Date.now().toString(36)}`, author, goal, start: now(), startCommit: git(this.root, ['rev-parse', 'HEAD']), agentSession };
+    const s: Session = { id: `S-${Date.now().toString(36)}`, author, goal, start: now(), startCommit: git(this.root, ['rev-parse', 'HEAD']), agentSession, baseline: this.dirtyHashes() };
     this.saveSession(s);
     this.log({ type: 'session_start', author, description: goal ? pick(this.config().language, `начало сессии: ${goal}`, `session start: ${goal}`) : pick(this.config().language, 'начало сессии', 'session start'), session: s.id });
     return s;
@@ -426,19 +429,56 @@ export class ProjectMemory {
     return s ? (Date.now() - Date.parse(s.start)) / 60_000 : 0;
   }
 
-  /** Files changed since the session began: commits made in it plus what is not committed yet. */
-  changedFiles(s = this.session()): string[] {
-    const set = new Set<string>();
-    if (s?.startCommit) for (const f of git(this.root, ['diff', '--name-only', `${s.startCommit}..HEAD`]).split('\n')) if (f) set.add(f);
-    // -z: exact paths, no quoting; untracked files listed one by one.
+  /** Every uncommitted path (untracked listed one by one) → content hash; '-' if the file is gone. */
+  private dirtyHashes(): Record<string, string> {
+    const out: Record<string, string> = {};
+    // -z: exact paths, no quoting.
     const entries = git(this.root, ['status', '--porcelain', '-z', '--untracked-files=all'], true).split('\0');
     for (let i = 0; i < entries.length; i++) {
       const e = entries[i];
       if (e.length < 4) continue;
-      set.add(e.slice(3));
+      const f = e.slice(3);
       if (e[0] === 'R' || e[0] === 'C') i++; // rename: the next entry is the old path
+      if (f.startsWith('.memory/')) continue;
+      out[f] = git(this.root, ['hash-object', '--', f]) || '-';
     }
+    return out;
+  }
+
+  /** Files changed since the session began: commits made in it plus uncommitted changes that were not already there, unchanged, at the start. */
+  changedFiles(s = this.session()): string[] {
+    const set = new Set<string>();
+    if (s?.startCommit) for (const f of git(this.root, ['diff', '--name-only', `${s.startCommit}..HEAD`]).split('\n')) if (f) set.add(f);
+    for (const [f, h] of Object.entries(this.dirtyHashes())) if (s?.baseline?.[f] !== h) set.add(f);
     return [...set].filter((f) => !f.startsWith('.memory/'));
+  }
+
+  /** Uncommitted work and commits of the session: what a close has to account for. */
+  sessionWork(s = this.session()) {
+    const cfg = this.config();
+    const files = this.changedFiles(s);
+    const commits = s?.startCommit ? git(this.root, ['log', '--format=%h', `${s.startCommit}..HEAD`]).split('\n').filter(Boolean) : [];
+    const wikiPrefix = cfg.wikiDir.replace(/\/?$/, '/');
+    const codeFiles = files.filter((f) => !f.startsWith(wikiPrefix) && f !== cfg.changelog && !f.startsWith('.claude/') && !f.startsWith('.githooks/'));
+    const wikiFiles = files.filter((f) => f.startsWith(wikiPrefix) && f !== cfg.journal);
+    return { files, commits, codeFiles, wikiFiles };
+  }
+
+  /**
+   * An agent's own close of a session that changed code must carry the whole handoff:
+   * what was done, one next task, the JSON details, and the wiki (or an explicit reason it needs none).
+   * [] = nothing missing. Automatic closes and sessions without code changes are not checked.
+   */
+  closeProblems(e: { done?: string[]; next?: string[]; details?: unknown; noWiki?: string }): string[] {
+    const L = this.config().language;
+    const w = this.sessionWork();
+    if (!w.codeFiles.length) return [];
+    const p: string[] = [];
+    if (!e.done?.length) p.push(pick(L, 'нет --done: что сделано (хотя бы один пункт)', 'no --done: what was done (at least one item)'));
+    if (!e.next?.length) p.push(pick(L, 'нет --next: ровно одна следующая задача для рестарта', 'no --next: exactly one next task for the restart'));
+    if (e.details === undefined || e.details === '') p.push(pick(L, 'нет --details: JSON с файлами, командами, результатами тестов, открытыми вопросами', 'no --details: JSON with files, commands, test results, open questions'));
+    if (!w.wikiFiles.length && !this.session()?.wikiTouched && !e.noWiki) p.push(pick(L, `wiki (${this.config().wikiDir}/) в сессии не обновлялась: обнови её или укажи --no-wiki "<почему wiki не нужна>"`, `the wiki (${this.config().wikiDir}/) was not updated in this session: update it or pass --no-wiki "<why no wiki change is needed>"`));
+    return p;
   }
 
   /**

@@ -6,7 +6,6 @@
 | Installation and operation guide | [SETUP.en.md](SETUP.en.md) | [SETUP.md](SETUP.md) |
 | Project memory: wiki, facts, decisions, journal | [MEMORY.en.md](MEMORY.en.md) | [MEMORY.md](MEMORY.md) |
 | Technical reference | [TECHNICAL.md](TECHNICAL.md) | — |
-| Working with Orca | — | [ORCA.md](ORCA.md) |
 | Gemini bridge | — | [GEMINI-BRIDGE.md](GEMINI-BRIDGE.md) |
 | Description for the repository page | [ABOUT.md](ABOUT.md) | [ABOUT.md](ABOUT.md) |
 | Handoff notes, roadmap, changelog | [HANDOFF.md](../HANDOFF.md) · [ROADMAP.md](../ROADMAP.md) · [CHANGELOG.md](../CHANGELOG.md) | те же (на русском) |

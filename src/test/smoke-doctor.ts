@@ -9,7 +9,7 @@ import { execFileSync } from 'child_process';
 import { tmpdir, testConfig, check, sh } from './helpers';
 import { Doctor, discoverProjects } from '../main/doctor';
 import { Hub } from '../main/hub';
-import { workerEnv } from '../main/worker';
+import { runWorker, workerEnv, WORKER_HOOK_SETTINGS } from '../main/worker';
 import { fromPreset } from '../main/catalog';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -103,8 +103,8 @@ process.exit(0);
   fs.chmodSync(path.join(bin, 'rtk'), 0o755);
 
   const projRoot = path.join(tmp, 'Developer');
-  const a = repo(projRoot, 'site-b', true);
-  const b = repo(path.join(projRoot, 'Work'), 'app-a', false);
+  const a = repo(projRoot, 'site-a', true);
+  const b = repo(path.join(projRoot, 'Work'), 'app-b', false);
   repo(path.join(projRoot, 'node_modules'), 'junk', false);
   // Copied disk: executable bit changed, content not.
   fs.chmodSync(path.join(a, 'run.sh'), 0o755);
@@ -117,6 +117,14 @@ process.exit(0);
   const wh = we.CLAUDE_CONFIG_DIR!;
   check(JSON.stringify(JSON.parse(fs.readFileSync(path.join(wh, 'settings.json'), 'utf8')).hooks.PreToolUse).includes('rtk hook claude') && fs.readFileSync(path.join(wh, 'CLAUDE.md'), 'utf8').includes('@RTK.md'), 'worker config dir gets the RTK hook and RTK.md');
   check(!we.CLOUDFLARE_API_TOKEN && !we.GITHUB_TOKEN && !we.MY_DB_PASSWORD && we.ORCHESTRA_WORKER === '1' && /worker-sandbox/.test(we.XDG_CONFIG_HOME ?? '') && we.ANTHROPIC_AUTH_TOKEN === 'k', 'worker env: no prod keys, own wrangler config, provider key kept');
+  // Every worker gets the guard + fact gate hook by flag, even where the project has no .claude/settings.json in git
+  const argsFile = path.join(tmp, 'worker-args.txt');
+  const fakeClaude = path.join(tmp, 'fake-claude');
+  fs.writeFileSync(fakeClaude, `#!/bin/sh\nprintf '%s\\n' "$@" > "${argsFile}"\necho '{"type":"result","subtype":"success","result":"ok","is_error":false}'\n`);
+  fs.chmodSync(fakeClaude, 0o755);
+  await runWorker({ cfg: testConfig(fakeClaude), provider: fromPreset('deepseek', { token: 'k' }), cwd: tmp, prompt: 'x', onLog: () => {} }).promise;
+  const wargs = fs.readFileSync(argsFile, 'utf8').split('\n');
+  check(wargs[wargs.indexOf('--settings') + 1] === WORKER_HOOK_SETTINGS && WORKER_HOOK_SETTINGS.includes('hook guard') && WORKER_HOOK_SETTINGS.includes('Edit'), 'worker is started with the guard + fact gate hook by flag');
   delete process.env.CLOUDFLARE_API_TOKEN;
   delete process.env.GITHUB_TOKEN;
   delete process.env.MY_DB_PASSWORD;

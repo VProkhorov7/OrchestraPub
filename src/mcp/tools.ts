@@ -221,11 +221,14 @@ export function registerMemoryTools(server: McpServer, repo: string, author = 'm
         gates: z.array(z.string()).max(3).optional().describe('at most 3 mandatory items before the next task, each closable by one command or one fact'),
         next: z.string().optional().describe('exactly one next task; everything else goes to wiki/status/current.md'),
         details: z.any().optional(),
+        noWiki: z.string().optional().describe('only if the session changed code and no wiki change is needed: why'),
       },
     },
-    guard((a) => {
+    guard(({ noWiki, ...a }) => {
       const m = mem();
       if (!m.session()) m.sessionStart(author);
+      const problems = m.closeProblems({ done: a.done, next: a.next ? [a.next] : [], details: a.details, noWiki });
+      if (problems.length) throw new Error('the session cannot be closed without a full handoff:\n- ' + problems.join('\n- '));
       const r = m.sessionEnd({ author, ...a, next: a.next ? [a.next] : [] });
       return `session closed ${r.event.id}${r.warnings.length ? '\nWARNING: ' + r.warnings.join('; ') : ''}`;
     }),

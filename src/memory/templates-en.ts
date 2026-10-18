@@ -37,7 +37,7 @@ This produces two records: a short human one in \`wiki/JOURNAL.md\` and a detail
 
 **«Give me a fresh digest».** Run \`orchestra-memory digest\` and retell the latest records briefly in English: what was done, what was decided, what is next.
 
-**Commit and push.** Memory (\`.memory/\`), \`wiki/\` and \`CHANGELOG.md\` are added to every commit by a git hook. If \`git push\` stops with «memory was appended as a separate commit», just repeat the push. Or use \`orchestra-memory push\` right away.
+**Commit and push.** Memory (\`.memory/\`), \`wiki/\` and \`CHANGELOG.md\` are added to every commit by a git hook. If unsaved memory is left before \`git push\`, the hook commits it separately and it goes out with the next push. To send it right away, use \`orchestra-memory push\`.
 
 **Command output (RTK).** If \`rtk\` is installed, shell output in this session is condensed automatically to save tokens; treat it as the complete result. Re-run a command as \`rtk proxy <cmd>\` only when its result is unusable: empty when output was clearly expected, contradicting its exit code, or garbled. Batch related commands into one call.
 

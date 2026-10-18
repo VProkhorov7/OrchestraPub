@@ -164,6 +164,7 @@ export function upgradeNeeds(root: string): string[] {
   for (const f of ['CLAUDE.md', 'AGENTS.md']) if (!rulesOf(path.join(root, f)).includes(agentRules(projectLanguage(root)).trim())) needs.push(`правила в ${f}`);
   const settings = rulesOf(path.join(root, '.claude', 'settings.json'));
   if (!settings.includes('hook guard')) needs.push('сторож прода');
+  if (!settings.includes('hook stop')) needs.push('принудительное закрытие сессии');
   const kit = kitPending(root).map((f) => path.basename(f, '.md'));
   if (kit.length) needs.push(kit.includes('orchestra') ? `команда /orchestra${kit.length > 1 ? ' и роли' : ''}` : 'роли агентов');
   const cfg = new ProjectMemory(root).config();

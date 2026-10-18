@@ -45,7 +45,7 @@ orchestra-memory session-end --summary "<2–3 понятных предложе
 
 **«Дай свежую выжимку».** Выполни \`orchestra-memory digest\` и перескажи последние записи коротко и по-русски: что сделано, что решено, что дальше.
 
-**Коммит и push.** Память (\`.memory/\`), \`wiki/\` и \`CHANGELOG.md\` автоматически добавляются в каждый коммит git-хуком. Если \`git push\` остановится с сообщением «память дописана отдельным коммитом», просто повтори push. Или сразу используй \`orchestra-memory push\`.
+**Коммит и push.** Память (\`.memory/\`), \`wiki/\` и \`CHANGELOG.md\` автоматически добавляются в каждый коммит git-хуком. Если перед \`git push\` осталась несохранённая память, хук допишет её отдельным коммитом, и он уйдёт со следующим push. Чтобы отправить сразу, используй \`orchestra-memory push\`.
 
 **Как работать (эти правила — последние нарочно: в середине длинного текста правило перестаёт работать).**
 - **Сначала разбор, потом работа.** Любое поручение, даже жалобу, сначала разбери вслух: суть, твоё мнение с цифрой, если есть, вопрос, если что-то неясно. Называй допущения; если задачу можно понять по-разному — покажи варианты, не выбирай молча. Потом делай. Согласие — тоже позиция: скажи, с чем согласен и почему.
@@ -77,6 +77,7 @@ export const CLAUDE_HOOKS = {
   SessionStart: [{ hooks: [{ type: 'command', command: 'command -v orchestra-memory >/dev/null && orchestra-memory hook session-start || true', timeout: 20 }] }],
   UserPromptSubmit: [{ hooks: [{ type: 'command', command: 'command -v orchestra-memory >/dev/null && orchestra-memory hook prompt || true', timeout: 20 }] }],
   PostToolUse: [{ matcher: 'Edit|Write|MultiEdit|NotebookEdit|Bash', hooks: [{ type: 'command', command: 'command -v orchestra-memory >/dev/null && orchestra-memory hook tool || true', timeout: 20 }] }],
+  Stop: [{ hooks: [{ type: 'command', command: 'command -v orchestra-memory >/dev/null && orchestra-memory hook stop || true', timeout: 20 }] }],
   SessionEnd: [{ hooks: [{ type: 'command', command: 'command -v orchestra-memory >/dev/null && orchestra-memory hook session-end || true', timeout: 30 }] }],
 };
 
@@ -182,6 +183,7 @@ model: opus
 You review a diff; you do not fix it.
 - Check against: the brief's "done when", wiki/INVARIANTS.md, decisions in .memory/logic.json (orchestra-memory context "<topic>").
 - Look for: broken invariants, missing tests for changed behaviour, a test that would stay green if the protected code were removed, secrets in the diff, migrations edited instead of added, silent fallbacks to empty values.
+- Hunt for silent failures in the changed code (idea: silent-failure-hunter in github.com/affaan-m/ECC, MIT): empty catch blocks; errors turned into null / [] / defaults with no context (a .catch returning an empty array); log-and-forget handling; lost stack or generic rethrow; missing await or an unhandled promise; network/file/db calls with no timeout or error path; no rollback around multi-step writes. Per finding: file:line, severity, what is hidden, the fix.
 - Verdict first: MERGE / FIX / REJECT, then numbered findings with file:line and why.
 - Say plainly what you could not verify.
 `,

@@ -24,6 +24,14 @@ export interface WorkerHandle {
   kill: () => void;
 }
 
+/**
+ * Hooks every worker gets by flag, so they do not depend on the project's own .claude/settings.json
+ * (which is often not in git, so a worktree has none): the prod guard and the fact gate both run in `orchestra-memory hook guard`.
+ */
+export const WORKER_HOOK_SETTINGS = JSON.stringify({
+  hooks: { PreToolUse: [{ matcher: 'Bash|Edit|Write|MultiEdit|NotebookEdit', hooks: [{ type: 'command', command: 'command -v orchestra-memory >/dev/null && orchestra-memory hook guard || true', timeout: 15 }] }] },
+});
+
 /** Build the environment that points Claude Code at a third-party Anthropic-compatible endpoint. */
 export function workerEnv(provider: ProviderConfig, cfg: AppConfig): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
@@ -94,6 +102,7 @@ export function runWorker(opts: {
 }): WorkerHandle {
   const { cfg, provider, cwd, prompt, onLog, onUsage } = opts;
   const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose'];
+  args.push('--settings', WORKER_HOOK_SETTINGS);
   if (provider.model) args.push('--model', provider.model);
   if (cfg.skipPermissions) args.push('--dangerously-skip-permissions');
   else args.push('--permission-mode', 'acceptEdits');

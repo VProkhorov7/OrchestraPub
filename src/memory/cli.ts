@@ -9,6 +9,7 @@ import { execFileSync, spawnSync } from 'child_process';
 import { ProjectMemory, checkHandoff, checkManualLog } from './store';
 import { APPROVE_RE, approveLatest, checkBrief, describe as describeBrief, listBriefs } from './brief';
 import { ensureMemory, setupRepo } from './setup';
+import { gate } from './gate';
 import { GUARD_DEFAULTS, GuardConfig, GRANT_RE, REVOKE_RE, decide, detectPushDeploys, grant, revoke } from './guard';
 import { Lang, appLanguage, pick, projectLanguage } from './lang';
 
@@ -198,7 +199,7 @@ function guardConfig(root: string): GuardConfig {
 }
 
 async function hook(name: string, a: Args) {
-  const input = ['session-start', 'prompt', 'tool', 'session-end', 'guard'].includes(name) ? readStdin() : {};
+  const input = ['session-start', 'prompt', 'tool', 'session-end', 'stop', 'guard'].includes(name) ? readStdin() : {};
   const root = repoRoot(input.cwd || process.cwd());
   const L = projectLanguage(root);
   // The prod guard works even where memory is off (Orchestra workers): that is exactly who it must stop.
@@ -212,6 +213,10 @@ async function hook(name: string, a: Args) {
       note(pick(L, `сторож прода остановил: ${cmd} — ${d.reason.split('.')[0]}`, `the prod guard stopped: ${cmd}: ${d.reason.split('.')[0]}`));
       out(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: `${pick(L, 'Сторож прода', 'Prod guard')}: ${d.reason}` } }));
     } else if (d.decision === 'allowed-by-owner') note(pick(L, `команда к проду по разрешению владельца (до ${d.until.slice(11, 16)} UTC): ${cmd}`, `a production command by the owner's permission (until ${d.until.slice(11, 16)} UTC): ${cmd}`));
+    if (d.decision !== 'deny' && process.env.ORCHESTRA_WORKER && !process.env.ORCHESTRA_NO_GATEGUARD) {
+      const g = gate(String(input.tool_name ?? ''), input.tool_input ?? {}, root, String(input.session_id ?? ''), L);
+      if (g.decision === 'deny') out(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: g.reason } }));
+    }
     return;
   }
   let grantNote = '';
@@ -270,7 +275,10 @@ async function hook(name: string, a: Args) {
         } else if (c) parts.push(pick(L, `Владелец написал «утверждаю», но бриф не утверждён:\n${describeBrief(c, L)}\nИсправь и покажи владельцу снова.`, `The owner wrote «approve the brief», but the brief is not approved:\n${describeBrief(c, L)}\nFix it and show it to the owner again.`));
       }
       if (/свеж[а-яё]* выжимк|дай выжимк|что сделано за|fresh digest|give me (a )?digest|what was done (since|for|in)/i.test(prompt)) parts.push(`${pick(L, 'Запрос выжимки. Последние записи лога', 'A digest was requested. The latest log records')}:\n${m.digest({ limit: 40 })}`);
-      const hits = prompt ? m.search(prompt, 6).filter((h) => h.score >= 2) : [];
+      // Per-project tuning of the memory block (e.g. in .claude/settings.json "env"); defaults keep the old behaviour.
+      const envNum = (k: string, d: number) => { const v = Number(process.env[k]); return process.env[k]?.trim() && Number.isFinite(v) && v >= 0 ? v : d; };
+      const words = prompt.split(/\s+/).filter(Boolean).length;
+      const hits = prompt && words >= envNum('ORCHESTRA_MEMORY_HOOK_MIN_WORDS', 0) ? m.search(prompt, envNum('ORCHESTRA_MEMORY_HOOK_LIMIT', 6)).filter((h) => h.score >= envNum('ORCHESTRA_MEMORY_HOOK_MIN_SCORE', 2)) : [];
       if (hits.length) parts.push(pick(L, 'Из памяти проекта по этой теме', 'From the project memory on this topic') + ':\n' + hits.map((h) => {
         const it: any = h.item;
         return h.kind === 'fact' ? `- ${pick(L, 'факт', 'fact')} ${it.id}: ${it.text}` : h.kind === 'decision' ? `- ${pick(L, 'решение', 'decision')} ${it.id} ${it.title}: ${it.decision} (${pick(L, 'почему', 'why')}: ${it.why})` : `- ${it.ts.slice(0, 10)} ${it.type}: ${it.description}`;
@@ -307,6 +315,27 @@ async function hook(name: string, a: Args) {
       autoClose(m, pick(L, 'сессия агента завершилась', 'the agent session ended'));
       return;
     }
+    case 'stop': {
+      // Stop hook: the agent wants to end its turn. A session with work that is «finished» (a commit, or past the norm) must be closed first.
+      if (input.stop_hook_active || process.env.ORCHESTRA_WORKER) return;
+      const s = m.session();
+      if (!s) return;
+      const w = m.sessionWork(s);
+      if (!w.codeFiles.length && !w.wikiFiles.length) return;
+      const mins = Math.round(m.minutesInSession());
+      if (!w.commits.length && mins < cfg.sessionMinutes) return;
+      const why = w.commits.length ? pick(L, `в сессии есть коммит (${w.commits.length})`, `the session has a commit (${w.commits.length})`) : pick(L, `сессия идёт ${mins} мин (норма ${cfg.sessionMinutes})`, `the session has run ${mins} min (norm ${cfg.sessionMinutes})`);
+      m.markSession({ stopBlockedAt: new Date().toISOString() });
+      out(JSON.stringify({
+        decision: 'block',
+        reason: pick(
+          L,
+          `Закрой сессию, прежде чем остановиться: ${why}. Обнови wiki и выполни orchestra-memory session-end --summary "<2–3 предложения для владельца>" --done "<сделано>" --why "<почему так>" --next "<ровно одна следующая задача для рестарта>" --details '<JSON: файлы, команды, результаты тестов, открытые вопросы>' [--gate "<обязательное, до 3>"] (или MCP memory_session_end). Если wiki не нужна — добавь --no-wiki "<почему>". Пока не закрыто, остановиться нельзя.`,
+          `Close the session before stopping: ${why}. Update the wiki and run orchestra-memory session-end --summary "<2–3 sentences for the owner>" --done "<done>" --why "<why>" --next "<exactly one next task for the restart>" --details '<JSON: files, commands, test results, open questions>' [--gate "<mandatory, up to 3>"] (or MCP memory_session_end). If no wiki change is needed add --no-wiki "<why>". You cannot stop until it is closed.`,
+        ),
+      }));
+      return;
+    }
     case 'pre-commit': {
       const staged = git(root, ['diff', '--cached', '--name-only']).split('\n').filter(Boolean);
       if (!staged.length || memoryOnly(staged, m)) return;
@@ -336,8 +365,9 @@ async function hook(name: string, a: Args) {
       if (!dirty) return;
       git(root, ['add', '--', ...paths]);
       git(root, ['commit', '--no-verify', '-q', '-m', pick(L, 'chore(memory): журнал, память и wiki', 'chore(memory): journal, memory and wiki')], { ORCHESTRA_MEMORY_OFF: '1' });
-      process.stderr.write(pick(L, 'orchestra-memory: память и журнал дописаны отдельным коммитом. Повторите git push, чтобы отправить их вместе с кодом.\n', 'orchestra-memory: memory and the journal were appended as a separate commit. Repeat git push to send them together with the code.\n'));
-      process.exit(1);
+      // Не отменяем push: журнал дописывается после каждого вызова инструмента, и отмена зацикливала бы каждый git push.
+      // Push уходит с уже вычисленным HEAD, новый коммит памяти уедет со следующим push (или сразу: orchestra-memory push).
+      process.stderr.write(pick(L, 'orchestra-memory: память и журнал дописаны отдельным коммитом; он уйдёт со следующим push (сразу — orchestra-memory push).\n', 'orchestra-memory: memory and the journal were appended as a separate commit; it goes out with the next push (right away: orchestra-memory push).\n'));
     }
   }
 }
@@ -355,7 +385,7 @@ const HELP = `orchestra-memory: память проекта, wiki и логи
                               (--why обязательно для feature, fix, change, security, deploy, cleanup, refactor, removed;
                                ручная чистка данных без устранения причины — cleanup, не fix)
   session-start [--goal "…"]  начать микросессию (обычно делает хук)
-  session-end --summary "…" [--done …]… [--why …] [--gate …]×≤3 [--next "одна задача"] [--details '{json}']
+  session-end --summary "…" [--done …]… [--why …] [--gate …]×≤3 [--next "одна задача"] [--details '{json}'] [--no-wiki "почему"]
   brief check [файл]          бриф из /orchestra: все ли разделы, нет ли заглушек, утверждён ли (код выхода 0 — можно выполнять)
   brief list                  брифы проекта и их состояние
   status                      текущая сессия и размеры памяти
@@ -363,7 +393,8 @@ const HELP = `orchestra-memory: память проекта, wiki и логи
   changelog --draft           значимые события с прошлого обновления CHANGELOG
   changelog --write file.md [--release "этап"]  внести выжимку (разделы ### Added / ### Fixed …) в CHANGELOG.md
   push [аргументы git push]   дописать память отдельным коммитом, если нужно, и сделать git push
-  hook <session-start|prompt|tool|session-end|pre-commit|pre-push>   для хуков
+  hook <session-start|prompt|tool|stop|session-end|pre-commit|pre-push>   для хуков
+      (hook prompt: ORCHESTRA_MEMORY_HOOK_LIMIT=6, ORCHESTRA_MEMORY_HOOK_MIN_SCORE=2, ORCHESTRA_MEMORY_HOOK_MIN_WORDS=0)
 
 Общие флаги: --repo <путь> (по умолчанию текущий репозиторий), --author <имя>`;
 
@@ -378,7 +409,7 @@ const HELP_EN = `orchestra-memory: project memory, wiki and logs
                               (--why is required for feature, fix, change, security, deploy, cleanup, refactor, removed;
                                a manual data cleanup that leaves the cause in place is cleanup, not fix)
   session-start [--goal "…"]  start a micro-session (usually done by a hook)
-  session-end --summary "…" [--done …]… [--why …] [--gate …]×≤3 [--next "one task"] [--details '{json}']
+  session-end --summary "…" [--done …]… [--why …] [--gate …]×≤3 [--next "one task"] [--details '{json}'] [--no-wiki "why"]
   brief check [file]          a /orchestra brief: all sections present, no placeholders, approved (exit code 0 = ready to execute)
   brief list                  the project's briefs and their state
   status                      the current session and the size of the memory
@@ -386,7 +417,8 @@ const HELP_EN = `orchestra-memory: project memory, wiki and logs
   changelog --draft           significant events since the last CHANGELOG update
   changelog --write file.md [--release "stage"]  put a digest (sections ### Added / ### Fixed …) into CHANGELOG.md
   push [git push arguments]   append memory as a separate commit if needed and run git push
-  hook <session-start|prompt|tool|session-end|pre-commit|pre-push>   for hooks
+  hook <session-start|prompt|tool|stop|session-end|pre-commit|pre-push>   for hooks
+      (hook prompt: ORCHESTRA_MEMORY_HOOK_LIMIT=6, ORCHESTRA_MEMORY_HOOK_MIN_SCORE=2, ORCHESTRA_MEMORY_HOOK_MIN_WORDS=0)
 
 Common flags: --repo <path> (default: the current repository), --author <name>`;
 
@@ -444,6 +476,8 @@ async function main() {
       }
       checkHandoff(many(a.gate), many(a.next), L);
       if (!m.session()) m.sessionStart(who);
+      const problems = m.closeProblems({ done: many(a.done), next: many(a.next), details, noWiki: str(a['no-wiki']) });
+      if (problems.length) throw new Error(pick(L, 'сессию нельзя закрыть без полной передачи работы:\n- ', 'the session cannot be closed without a full handoff:\n- ') + problems.join('\n- '));
       const r = m.sessionEnd({ author: who, summary: str(a.summary)!, done: many(a.done), why: str(a.why), gates: many(a.gate), next: many(a.next), details });
       return out(pick(L, `Сессия закрыта (${r.event.id}). Журнал: ${m.config().journal}${r.warnings.length ? '\nВнимание: ' + r.warnings.join('; ') : ''}`, `Session closed (${r.event.id}). Journal: ${m.config().journal}${r.warnings.length ? '\nWarning: ' + r.warnings.join('; ') : ''}`));
     }

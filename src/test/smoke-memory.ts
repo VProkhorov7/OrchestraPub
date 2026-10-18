@@ -115,7 +115,7 @@ function shim(dir: string) {
   check(m.readLog({ types: ['commit'] }).some((e) => e.description === 'коммит: экспорт в CSV'), 'commit message captured in the log');
   run(['log', '--type', 'note', 'заметка после коммита']);
   const p1 = gitE(['push', '-q', 'origin', 'HEAD:main']);
-  check(p1.status !== 0 && p1.stderr.includes('Повторите git push'), 'pre-push adds a memory commit and asks to push again');
+  check(p1.status === 0 && p1.stderr.includes('со следующим push'), 'pre-push adds a memory commit and lets the push through');
   check(sh('git', ['log', '-1', '--format=%s'], repo).includes('chore(memory)'), 'memory commit made');
   check(gitE(['push', '-q', 'origin', 'HEAD:main']).status === 0, 'second push goes through');
   check(sh('git', ['--git-dir', bare, 'show', 'main:.memory/facts.json'], tmp).includes('F-0001'), 'memory is on the remote');
@@ -137,11 +137,74 @@ function shim(dir: string) {
   check(p.hookSpecificOutput.additionalContext.includes('Микросессия идёт 40 мин') && p.hookSpecificOutput.additionalContext.includes('F-0001'), 'reminder after 35 min + relevant memory');
   check(!hook('prompt', { prompt: 'ещё' }).includes('Микросессия'), 'reminder not repeated immediately');
   check(hook('prompt', { prompt: 'дай свежую выжимку' }).includes('Запрос выжимки'), '«дай свежую выжимку» gets the latest log');
+  // 4-. memory block tuning via env: defaults unchanged, LIMIT / MIN_SCORE / MIN_WORDS narrow it
+  const hookEnv = (extra: Record<string, string>, prompt: string) => execFileSync(CLI, ['hook', 'prompt'], { cwd: repo, env: { ...env, ...extra }, input: JSON.stringify({ cwd: repo, session_id: 'cc-1', prompt }), stdio: ['pipe', 'pipe', 'pipe'] }).toString();
+  const memLines = (out: string) => { const c = JSON.parse(out).hookSpecificOutput.additionalContext as string; const i = c.indexOf('Из памяти проекта по этой теме:\n'); return i < 0 ? 0 : c.slice(i).split('\n\n')[0].split('\n').filter((l) => l.startsWith('- ')).length; };
+  const q = 'деплой cloudflare добавлен экспорт CSV export';
+  const dflt = memLines(hookEnv({}, q));
+  check(dflt >= 2 && dflt <= 6 && dflt === memLines(hookEnv({ ORCHESTRA_MEMORY_HOOK_LIMIT: '', ORCHESTRA_MEMORY_HOOK_MIN_SCORE: 'x' }, q)), `memory hook: defaults (6 / 2) give several records, empty or bad values fall back (${dflt})`);
+  check(memLines(hookEnv({ ORCHESTRA_MEMORY_HOOK_LIMIT: '1' }, q)) === 1, 'memory hook: LIMIT=1 gives one record');
+  check(memLines(hookEnv({ ORCHESTRA_MEMORY_HOOK_MIN_SCORE: '1000' }, q)) === 0, 'memory hook: a high MIN_SCORE drops the records');
+  const short = JSON.parse(hookEnv({ ORCHESTRA_MEMORY_HOOK_MIN_WORDS: '7' }, q)).hookSpecificOutput.additionalContext as string;
+  check(!short.includes('Из памяти проекта') && short.includes('Сейчас:'), 'memory hook: a message shorter than MIN_WORDS has no memory block, the time line stays');
+  check(memLines(hookEnv({ ORCHESTRA_MEMORY_HOOK_MIN_WORDS: '6' }, q)) === dflt, 'memory hook: a message of MIN_WORDS words still gets the block');
+  // 4-+. gate for workers: the first edit of each file is refused with questions, the retry goes through
+  const gateRun = (extra: Record<string, string>, tool: string, file: string, sid = 'gate-1') => execFileSync(CLI, ['hook', 'guard'], { cwd: repo, env: { ...env, ...extra }, input: JSON.stringify({ cwd: repo, session_id: sid, tool_name: tool, tool_input: { file_path: path.join(repo, file) } }), stdio: ['pipe', 'pipe', 'pipe'] }).toString();
+  const W = { ORCHESTRA_WORKER: '1', ORCHESTRA_MEMORY_OFF: '1' };
+  const g1 = gateRun(W, 'Edit', 'src/a.ts');
+  check(g1.includes('"permissionDecision":"deny"') && g1.includes('src/a.ts') && g1.includes('1.'), 'gate: the first edit of a file by a worker is refused with questions');
+  check(gateRun(W, 'Edit', 'src/a.ts') === '', 'gate: the retry of the same file goes through');
+  check(gateRun(W, 'Edit', 'src/b.ts').includes('deny'), 'gate: another file is gated on its own first edit');
+  check(gateRun(W, 'Read', 'src/c.ts') === '', 'gate: reading is never gated');
+  check(gateRun({ ORCHESTRA_MEMORY_OFF: '1' }, 'Edit', 'src/z.ts', 'gate-2') === '', 'gate: the owner session (not a worker) is not gated');
+  check(gateRun({ ...W, ORCHESTRA_NO_GATEGUARD: '1' }, 'Edit', 'src/y.ts', 'gate-3') === '', 'gate: ORCHESTRA_NO_GATEGUARD switches it off');
+  check(gateRun(W, 'Write', 'new-file.ts', 'gate-4').includes('нового файла') || gateRun(W, 'Write', 'new-file2.ts', 'gate-5').includes('вызываться'), 'gate: a new file gets the «who calls it / no duplicate» questions');
   fs.writeFileSync(path.join(repo, 'src-a.txt'), 'x');
   hook('session-end', { reason: 'other' });
   check(fs.readFileSync(path.join(repo, 'wiki', 'JOURNAL.md'), 'utf8').includes('запись автоматическая'), 'unclosed session closed automatically');
   gitE(['add', '-A']);
   gitE(['commit', '-q', '-m', 'сессия агента']);
+
+  // 4a. a tree that is already dirty must not turn an empty session into «N files changed»
+  hook('session-end', { reason: 'other' }); // the commit above may have opened a session: flush it first
+  fs.writeFileSync(path.join(repo, 'dirty-old.txt'), 'someone else');
+  const jbefore = fs.readFileSync(path.join(repo, 'wiki', 'JOURNAL.md'), 'utf8');
+  const hook2 = (name: string, payload: object) => run(['hook', name], JSON.stringify({ cwd: repo, session_id: 'cc-2', ...payload }));
+  hook2('prompt', { prompt: 'просто вопрос' });
+  hook2('session-end', { reason: 'other' });
+  check(fs.readFileSync(path.join(repo, 'wiki', 'JOURNAL.md'), 'utf8') === jbefore, 'empty session in a dirty tree writes nothing to the journal');
+  hook2('prompt', { prompt: 'работаем' });
+  fs.writeFileSync(path.join(repo, 'new-mine.txt'), 'mine');
+  hook2('session-end', { reason: 'other' });
+  const jafter = fs.readFileSync(path.join(repo, 'wiki', 'JOURNAL.md'), 'utf8');
+  check(jafter.includes('Изменено файлов: 1') && jafter.includes('new-mine.txt') && !jafter.includes('dirty-old.txt'), 'only the files changed in the session are counted');
+  gitE(['add', '-A']);
+  gitE(['commit', '-q', '-m', 'сессия 2']);
+
+  // 4c. Stop hook + strict close: finished work (a commit) cannot be left without a full handoff
+  const hook3 = (name: string, payload: object = {}) => run(['hook', name], JSON.stringify({ cwd: repo, session_id: 'cc-3', ...payload }));
+  hook3('session-end'); // flush the session the previous commit opened
+  hook3('prompt', { prompt: 'новая задача' });
+  fs.writeFileSync(path.join(repo, 'code3.txt'), 'work');
+  check(hook3('stop') === '', 'stop: work in progress (no commit, short session) may stop');
+  gitE(['add', 'code3.txt']);
+  gitE(['commit', '-q', '-m', 'код 3']);
+  const blocked = JSON.parse(hook3('stop'));
+  check(blocked.decision === 'block' && blocked.reason.includes('session-end') && blocked.reason.includes('--next'), 'stop: a commit without a closed session blocks the stop');
+  check(hook3('stop', { stop_hook_active: true }) === '', 'stop: no loop when the hook already blocked once');
+  const closeErr = (args: string[]) => {
+    try {
+      run(['session-end', '--summary', 'готово', ...args]);
+      return '';
+    } catch (e: any) {
+      return String(e.stderr);
+    }
+  };
+  const emptyClose = closeErr([]);
+  check(/--done/.test(emptyClose) && /--next/.test(emptyClose) && /--details/.test(emptyClose) && /wiki/.test(emptyClose), 'session-end with code changed and nothing else lists everything missing');
+  check(/wiki/.test(closeErr(['--done', 'x', '--next', 'y', '--details', '{"a":1}'])), 'session-end refuses code without wiki');
+  check(closeErr(['--done', 'x', '--next', 'y', '--details', '{"a":1}', '--no-wiki', 'служебный файл']) === '', 'session-end accepts a stated reason instead of the wiki');
+  check(hook3('stop') === '', 'stop: nothing to block after the session is closed');
 
   // 4b. prod guard (PreToolUse)
   const guard = (tool: string, input: object, extraEnv: object = {}) => {
@@ -243,7 +306,9 @@ function shim(dir: string) {
   const call = async (name: string, args: any) => ((await client.callTool({ name, arguments: args })) as any).content[0].text as string;
   check((await call('memory_add_decision', { title: 'Экспорт', decision: 'CSV, не XLSX', why: 'проще и хватает' })).startsWith('D-0002'), 'decision via MCP');
   check((await call('memory_context', { task: 'экспорт csv' })).includes('D-0002'), 'context via MCP');
-  check((await call('memory_session_end', { summary: 'MCP-сессия', done: ['решение по экспорту'] })).startsWith('session closed'), 'session end via MCP');
+  const thin = await call('memory_session_end', { summary: 'MCP-сессия', done: ['решение по экспорту'] }).catch((e: any) => String(e?.message ?? e));
+  check(!thin.startsWith('session closed'), 'session end via MCP: thin close refused when code changed');
+  check((await call('memory_session_end', { summary: 'MCP-сессия', done: ['решение по экспорту'], next: 'тесты', details: { tests: 'ok' }, noWiki: 'тестовый файл' })).startsWith('session closed'), 'session end via MCP');
   await client.close();
 
   // 7. summaries by the cheapest model

@@ -79,7 +79,7 @@ Yellow and red workers are refused by `delegate` and marked UNAVAILABLE to the o
 | claude-sub | official `claude` CLI | subscription default | subscription |
 | codex-sub | official `codex` CLI (orchestrator only) | plan default | subscription |
 | anthropic | api.anthropic.com | claude-sonnet-5 | API |
-| deepseek | api.deepseek.com/anthropic | deepseek-v4-pro | API ($0.435 / $0.87), balance shown |
+| deepseek | api.deepseek.com/anthropic | deepseek-v4-pro | API ($1.32 / $3.96 peak, half off-peak), balance shown |
 | glm / glm-plan | api.z.ai/api/anthropic | glm-5.3 | API ($1.40 / $4.40) / GLM Coding Plan |
 | kimi | api.moonshot.ai/anthropic | kimi-k3 | API |
 | minimax / minimax-plan | api.minimax.io/anthropic | MiniMax-M3 | API / Token Plan |

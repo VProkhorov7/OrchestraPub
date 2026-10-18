@@ -167,7 +167,7 @@ codex mcp add orchestra -- node /path/to/Orchestra/dist/mcp/server.js
 - **One coordinator per worktree.** Two agents merging into the same folder get in each other's way. Orchestra runs merges one at a time, but edits the coordinator makes in the same folder break a merge.
 - Do not keep one Orca terminal open on two computers at once (a known Orca bug with two desktop clients).
 - Orca agents on a Claude subscription and the Orchestra orchestrator spend the same limit. Watch the subscription card.
-- **Memory and wiki travel with the commit.** After `orchestra-memory init`, the rules live in the repository in `CLAUDE.md` and `AGENTS.md`. Agents in Orca terminals then check memory before a task, close micro-sessions and update the wiki on their own. The commit and push buttons in Orca trigger the repository's git hooks, so `.memory/`, `wiki/` and `CHANGELOG.md` land in the same commit. If the push stops with "memory was committed separately", push again. Details: [MEMORY.en.md](MEMORY.en.md).
+- **Memory and wiki travel with the commit.** After `orchestra-memory init`, the rules live in the repository in `CLAUDE.md` and `AGENTS.md`. Agents in Orca terminals then check memory before a task, close micro-sessions and update the wiki on their own. The commit and push buttons in Orca trigger the repository's git hooks, so `.memory/`, `wiki/` and `CHANGELOG.md` land in the same commit. If unsaved memory is left before a push, the hook commits it separately; the push is not cancelled and that commit goes out with the next push. Details: [MEMORY.en.md](MEMORY.en.md).
 
 ## 8. Budgets and costs
 
