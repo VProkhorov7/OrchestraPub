@@ -3,6 +3,7 @@
 | | English | Русский |
 |---|---|---|
 | Overview and quick start | [README.md](../README.md) | [README.ru.md](../README.ru.md) |
+| How to use it: a tour with screenshots | [TOUR.en.md](TOUR.en.md) | [TOUR.md](TOUR.md) |
 | Installation and operation guide | [SETUP.en.md](SETUP.en.md) | [SETUP.md](SETUP.md) |
 | Project memory: wiki, facts, decisions, journal | [MEMORY.en.md](MEMORY.en.md) | [MEMORY.md](MEMORY.md) |
 | Technical reference | [TECHNICAL.md](TECHNICAL.md) | — |

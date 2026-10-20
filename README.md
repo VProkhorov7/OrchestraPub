@@ -16,6 +16,10 @@ you ── task ──▶ orchestrator (Claude / ChatGPT, on a subscription or a
    the orchestrator reads the diff → merges / discards / asks for a fix → runs the tests → report
 ```
 
+![The Orchestra panel: four workers on one task](docs/screenshots/en/05-workers.png)
+
+**How to use it, step by step with screenshots: [docs/TOUR.en.md](docs/TOUR.en.md).**
+
 ## Why
 
 - **Cheap.** The strong model plans and reviews, usually on a subscription, so you do not pay per token. The code is written by models that cost 10–50× less.
@@ -60,7 +64,7 @@ npm run serve        # service: web panel + MCP, the address and the token are p
 
 Then open **Settings → Connections**. Add a Claude subscription for the orchestrator and at least one worker with a key, for example DeepSeek, and wait until both turn green. Then choose a repository, describe the task and press **Distribute automatically**.
 
-Full guide (home-server install, connections, MCP, Orca, troubleshooting): **[docs/SETUP.en.md](docs/SETUP.en.md)**. Technical reference: **[docs/TECHNICAL.md](docs/TECHNICAL.md)**. All documents: **[docs/README.md](docs/README.md)**.
+A tour of the panel with screenshots: **[docs/TOUR.en.md](docs/TOUR.en.md)**. Full guide (home-server install, connections, MCP, Orca, troubleshooting): **[docs/SETUP.en.md](docs/SETUP.en.md)**. Technical reference: **[docs/TECHNICAL.md](docs/TECHNICAL.md)**. All documents: **[docs/README.md](docs/README.md)**.
 
 ## Who can orchestrate, and with which models
 

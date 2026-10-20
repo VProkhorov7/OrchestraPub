@@ -40,7 +40,11 @@ async function startServer() {
     balanceCode = code;
     return checkOne(fromPreset('deepseek', { baseUrl: `http://127.0.0.1:${port}/anthropic`, token: 'k' }), cfg);
   };
-  return { one, close: () => srv.close() };
+  const priced = async (prices: boolean) => {
+    const p = { ...fromPreset('deepseek', { baseUrl: `http://127.0.0.1:${port}/anthropic`, token: 'k' }), preset: undefined, priceIn: prices ? 1 : undefined, priceOut: prices ? 1 : undefined };
+    return checkOne(p as any, cfg);
+  };
+  return { one, priced, close: () => srv.close() };
 }
 
 (async () => {
@@ -78,6 +82,11 @@ async function startServer() {
   check(b.low === true && b.best?.amount === 0, `(i) zero is low, best amount: ${b.best?.amount}`);
   b = balanceStatus([{ currency: 'USD', total_balance: '2' }, { currency: 'CNY', total_balance: '7' }]);
   check(b.low === false && b.best?.currency === 'CNY', `(i) best is CNY: ${b.best?.currency}`);
+
+  h = await srv.priced(false);
+  check((h.details ?? []).some((d) => /цены не заданы/.test(d)), `(j) a connection without prices says so: ${h.details}`);
+  h = await srv.priced(true);
+  check(!(h.details ?? []).some((d) => /цены не заданы/.test(d)), `(j) a connection with prices does not: ${h.details}`);
 
   srv.close();
   console.log(`SMOKE-BALANCE OK (порог ${LOW_BALANCE})`);
