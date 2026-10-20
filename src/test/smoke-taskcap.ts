@@ -28,6 +28,7 @@ import { makeFakeClaude, makeRepo, testConfig, tmpdir, check } from './helpers';
   check(t1.status === 'failed' && t1.capped === true && /превышен лимит задачи/.test(t1.error ?? ''), `stopped at the role cap: ${t1.status} ${t1.error}`);
   await new Promise((r) => setTimeout(r, 800));
   check(e.state.tasks.length === 1, 'a capped task is not retried');
+  check((t1.costUsd ?? 0) > 0 && (t1.tokensIn ?? 0) > 0, `a capped task keeps the cost and tokens reported while it ran: $${t1.costUsd}, ${t1.tokensIn} in`);
   check(/STOPPED AT A SPEND CAP/.test(e.briefStatus(t1)) && /continue_from="t01"/.test(e.briefStatus(t1)), 'the orchestrator is told to keep and continue it');
 
   // a provider that reports no usage at all: the cap still stops it, and the estimated cost is not zeroed afterwards
