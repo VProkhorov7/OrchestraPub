@@ -6,14 +6,17 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync, spawnSync } from 'child_process';
-import { ProjectMemory, checkHandoff, checkManualLog } from './store';
+import { ProjectMemory, checkHandoff, checkManualLog, duplicates } from './store';
 import { APPROVE_RE, approveLatest, checkBrief, describe as describeBrief, listBriefs } from './brief';
 import { ensureMemory, setupRepo } from './setup';
 import { gate } from './gate';
-import { GUARD_DEFAULTS, GuardConfig, GRANT_RE, REVOKE_RE, decide, detectPushDeploys, grant, revoke } from './guard';
+import { GUARD_DEFAULTS, GuardConfig, GRANT_RE, REVOKE_RE, decide, detectPushDeploys, grant, ownerWords, revoke } from './guard';
 import { Lang, appLanguage, pick, projectLanguage } from './lang';
 
 type Args = { _: string[]; [k: string]: string | string[] | boolean | undefined };
+
+/** Flags that never take a value: `prefix --force FEA` keeps FEA as the code. */
+const BOOL_FLAGS = new Set(['force']);
 
 function parse(argv: string[]): Args {
   const a: Args = { _: [] };
@@ -21,7 +24,7 @@ function parse(argv: string[]): Args {
     const t = argv[i];
     if (t.startsWith('--')) {
       const k = t.slice(2);
-      const v = argv[i + 1] !== undefined && !argv[i + 1].startsWith('--') ? argv[++i] : true;
+      const v = !BOOL_FLAGS.has(k) && argv[i + 1] !== undefined && !argv[i + 1].startsWith('--') ? argv[++i] : true;
       const prev = a[k];
       if (prev === undefined) a[k] = v as any;
       else a[k] = ([] as any[]).concat(prev, v);
@@ -191,6 +194,23 @@ function autoClose(m: ProjectMemory, why: string) {
 
 // ---------- hooks ----------
 
+/** The handoff of the last closed session, as plain text for the owner's screen after /clear. */
+function handoffText(m: ProjectMemory, L: Lang): string | undefined {
+  const last = m.readLog({ types: ['session_end'], limit: 1 })[0];
+  if (!last) return undefined;
+  const d = (last.details ?? {}) as any;
+  const lines = [`${pick(L, 'Прошлая сессия', 'Previous session')} (${new Date(last.ts).toLocaleString(pick(L, 'ru-RU', 'en-GB'), { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}): ${last.description}`];
+  if (d.done?.length) lines.push(`${pick(L, 'Сделано', 'Done')}: ${[].concat(d.done).join('; ')}`);
+  if (d.gates?.length) lines.push(`${pick(L, 'Обязательно', 'Mandatory')}: ${[].concat(d.gates).join('; ')}`);
+  if (d.next?.length) lines.push(`${pick(L, 'Дальше', 'Next')}: ${[].concat(d.next).join('; ')}`);
+  return lines.join('\n');
+}
+
+/** Has the owner already been told to /clear after this session_end? (one note per close) */
+function clearNoteFile(root: string) {
+  return path.join(path.resolve(root, git(root, ['rev-parse', '--git-dir']) || '.git'), 'orchestra-memory-clear-note');
+}
+
 const QUIET_CMD = /^\s*(ls|cat|head|tail|less|grep|rg|find|pwd|echo|which|wc|tree|file|stat|git (status|diff|log|show|branch|add|commit|push|fetch|pull|remote|rev-parse|config)|orchestra-memory)\b/;
 
 function guardConfig(root: string): GuardConfig {
@@ -221,7 +241,7 @@ async function hook(name: string, a: Args) {
   }
   let grantNote = '';
   if (name === 'prompt' && !process.env.ORCHESTRA_WORKER) {
-    const p = String(input.prompt ?? '');
+    const p = ownerWords(String(input.prompt ?? ''));
     if (REVOKE_RE.test(p)) {
       revoke(root);
       grantNote = pick(L, 'Владелец отозвал разрешение на команды к проду.', 'The owner revoked the permission for production commands.');
@@ -250,14 +270,15 @@ async function hook(name: string, a: Args) {
       const s = m.session();
       if (s && s.agentSession && input.session_id && s.agentSession !== input.session_id && m.minutesInSession() > cfg.sessionMinutes) autoClose(m, pick(L, 'новая сессия агента', 'a new agent session'));
       m.sessionStart(who, undefined, input.session_id);
-      hookContext(
-        'SessionStart',
+      // After /clear the screen is empty: show the owner the handoff of the closed session.
+      const shown = input.source === 'clear' ? handoffText(m, L) : undefined;
+      const text =
         pick(
           L,
           `Память проекта ${cfg.project} (правила в CLAUDE.md, блок «Память проекта»). Перед задачей смотри факты и решения: orchestra-memory context "<задача>". Микросессия ${cfg.sessionMinutes} мин, в конце — orchestra-memory session-end. wiki (${cfg.wikiDir}/) обновляется вместе с кодом.`,
           `Project memory of ${cfg.project} (rules in CLAUDE.md, the «Project memory» block). Before a task look at the facts and decisions: orchestra-memory context "<task>". A micro-session is ${cfg.sessionMinutes} min, at the end run orchestra-memory session-end. The wiki (${cfg.wikiDir}/) is updated together with the code.`,
-        ) + `\n\n${m.context('', 4000)}`,
-      );
+        ) + `\n\n${m.context('', 4000)}`;
+      out(JSON.stringify({ ...(shown ? { systemMessage: shown } : {}), hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: text } }));
       return;
     }
     case 'prompt': {
@@ -279,15 +300,18 @@ async function hook(name: string, a: Args) {
       const envNum = (k: string, d: number) => { const v = Number(process.env[k]); return process.env[k]?.trim() && Number.isFinite(v) && v >= 0 ? v : d; };
       const words = prompt.split(/\s+/).filter(Boolean).length;
       const hits = prompt && words >= envNum('ORCHESTRA_MEMORY_HOOK_MIN_WORDS', 0) ? m.search(prompt, envNum('ORCHESTRA_MEMORY_HOOK_LIMIT', 6)).filter((h) => h.score >= envNum('ORCHESTRA_MEMORY_HOOK_MIN_SCORE', 2)) : [];
+      // Every prompt's hits stay in the agent's context for the rest of the session: ORCHESTRA_MEMORY_HOOK_HIT_CHARS cuts each line (0 = whole).
+      const hitChars = envNum('ORCHESTRA_MEMORY_HOOK_HIT_CHARS', 0);
+      const cut = (s: string) => (hitChars && s.length > hitChars ? s.slice(0, hitChars) + '…' : s);
       if (hits.length) parts.push(pick(L, 'Из памяти проекта по этой теме', 'From the project memory on this topic') + ':\n' + hits.map((h) => {
         const it: any = h.item;
-        return h.kind === 'fact' ? `- ${pick(L, 'факт', 'fact')} ${it.id}: ${it.text}` : h.kind === 'decision' ? `- ${pick(L, 'решение', 'decision')} ${it.id} ${it.title}: ${it.decision} (${pick(L, 'почему', 'why')}: ${it.why})` : `- ${it.ts.slice(0, 10)} ${it.type}: ${it.description}`;
-      }).join('\n'));
+        return cut(h.kind === 'fact' ? `- ${pick(L, 'факт', 'fact')} ${it.id}: ${it.text}` : h.kind === 'decision' ? `- ${pick(L, 'решение', 'decision')} ${it.id} ${it.title}: ${it.decision} (${pick(L, 'почему', 'why')}: ${it.why})` : `- ${it.ts.slice(0, 10)} ${it.type}: ${it.description}`);
+      }).join('\n') + (hitChars ? '\n' + pick(L, 'Подробнее: orchestra-memory context "<задача>".', 'More: orchestra-memory context "<task>".') : ''));
       const s = m.session();
       const mins = m.minutesInSession();
       const last = s?.remindedAt ? (Date.now() - Date.parse(s.remindedAt)) / 60_000 : Infinity;
       if (mins >= cfg.sessionMinutes && last > 10) {
-        parts.push(pick(L, `Микросессия идёт ${Math.round(mins)} мин (норма ${cfg.sessionMinutes}). Закончи текущий шаг, обнови wiki и закрой сессию: orchestra-memory session-end --summary … --done … --next … --details '{…}'. Следующая работа начнётся новой сессией автоматически.`, `The micro-session has been running ${Math.round(mins)} min (norm ${cfg.sessionMinutes}). Finish the current step, update the wiki and close the session: orchestra-memory session-end --summary … --done … --next … --details '{…}'. The next work starts a new session automatically.`));
+        parts.push(pick(L, `Микросессия идёт ${Math.round(mins)} мин (норма ${cfg.sessionMinutes}). Закончи текущий шаг, обнови wiki и закрой сессию: orchestra-memory session-end --summary … --done … --next … --details '{…}'. Закрытие пишет журнал, но не сбрасывает контекст агента: после него попроси владельца набрать /clear — сводка придёт в новую сессию сама.`, `The micro-session has been running ${Math.round(mins)} min (norm ${cfg.sessionMinutes}). Finish the current step, update the wiki and close the session: orchestra-memory session-end --summary … --done … --next … --details '{…}'. Closing writes the journal but does not reset the agent's context: afterwards ask the owner to type /clear; the summary reaches the new session by itself.`));
         m.markSession({ remindedAt: new Date().toISOString() });
       }
       if (parts.length) hookContext('UserPromptSubmit', parts.join('\n\n'));
@@ -318,6 +342,14 @@ async function hook(name: string, a: Args) {
     case 'stop': {
       // Stop hook: the agent wants to end its turn. A session with work that is «finished» (a commit, or past the norm) must be closed first.
       if (input.stop_hook_active || process.env.ORCHESTRA_WORKER) return;
+      // This agent session has just closed a micro-session: tell the owner, once, that the context is still full.
+      const closed = m.readLog({ types: ['session_end'], limit: 1 })[0];
+      const noteFile = clearNoteFile(root);
+      if (closed && input.session_id && (closed.details as any)?.agent === input.session_id && (fs.existsSync(noteFile) ? fs.readFileSync(noteFile, 'utf8') : '') !== closed.id) {
+        fs.writeFileSync(noteFile, closed.id);
+        out(JSON.stringify({ systemMessage: pick(L, 'Микросессия закрыта, но контекст агента не сброшен и продолжит расти. Наберите /clear — сводка придёт в новую сессию сама.', 'The micro-session is closed, but the agent context is not reset and keeps growing. Type /clear: the summary reaches the new session by itself.') }));
+        return;
+      }
       const s = m.session();
       if (!s) return;
       const w = m.sessionWork(s);
@@ -336,7 +368,10 @@ async function hook(name: string, a: Args) {
       }));
       return;
     }
+    case 'pre-merge-commit':
+      return warnNewDuplicates(root, L);
     case 'pre-commit': {
+      warnNewDuplicates(root, L);
       const staged = git(root, ['diff', '--cached', '--name-only']).split('\n').filter(Boolean);
       if (!staged.length || memoryOnly(staged, m)) return;
       const s = m.session();
@@ -372,6 +407,23 @@ async function hook(name: string, a: Args) {
   }
 }
 
+/** Warn when the commit (or merge) brings a memory record id that is used twice and was not before. */
+function warnNewDuplicates(root: string, L: Lang) {
+  for (const file of ['.memory/logic.json', '.memory/facts.json']) {
+    const ids = (rev: string) => {
+      try {
+        return duplicates(JSON.parse(git(root, ['show', `${rev}:${file}`]) || '[]'));
+      } catch {
+        if (rev === '') process.stderr.write(pick(L, `orchestra-memory: внимание: ${file} в коммите не читается как JSON (остались метки конфликта?)\n`, `orchestra-memory: warning: ${file} in the commit is not valid JSON (conflict markers left?)\n`));
+        return [];
+      }
+    };
+    const before = new Set(ids('HEAD'));
+    const fresh = ids('').filter((id) => !before.has(id));
+    if (fresh.length) process.stderr.write(pick(L, `orchestra-memory: внимание: в ${file} повторяются номера ${fresh.join(', ')}. Подробно: orchestra-memory doctor\n`, `orchestra-memory: warning: ${file} repeats the ids ${fresh.join(', ')}. Details: orchestra-memory doctor\n`));
+  }
+}
+
 // ---------- main ----------
 
 const HELP = `orchestra-memory: память проекта, wiki и логи
@@ -381,6 +433,9 @@ const HELP = `orchestra-memory: память проекта, wiki и логи
   search "<слова>"            поиск по фактам, решениям и логу
   add-fact "<факт>" [--tags a,b] [--files f] [--source s] [--supersedes F-0001]
   add-decision --title T --decision D --why W [--alt A]… [--files f] [--facts F-1] [--supersedes D-1]
+                              (номер записи: D-FEA-0012 / F-FEA-0012, FEA — код ветки; старые D-0041 принимаются везде)
+  prefix [КОД] [--branch b] [--force]   код текущей ветки для номеров (1–4 латинские буквы); без КОДА — таблица кодов
+  doctor                      найти повторяющиеся номера в facts.json и logic.json
   log --type feature|fix|change|security|test|deploy|docs|cleanup|note --why "<зачем>" [--files f] "<описание>" [--details '{json}']
                               (--why обязательно для feature, fix, change, security, deploy, cleanup, refactor, removed;
                                ручная чистка данных без устранения причины — cleanup, не fix)
@@ -393,8 +448,8 @@ const HELP = `orchestra-memory: память проекта, wiki и логи
   changelog --draft           значимые события с прошлого обновления CHANGELOG
   changelog --write file.md [--release "этап"]  внести выжимку (разделы ### Added / ### Fixed …) в CHANGELOG.md
   push [аргументы git push]   дописать память отдельным коммитом, если нужно, и сделать git push
-  hook <session-start|prompt|tool|stop|session-end|pre-commit|pre-push>   для хуков
-      (hook prompt: ORCHESTRA_MEMORY_HOOK_LIMIT=6, ORCHESTRA_MEMORY_HOOK_MIN_SCORE=2, ORCHESTRA_MEMORY_HOOK_MIN_WORDS=0)
+  hook <session-start|prompt|tool|stop|session-end|pre-commit|pre-merge-commit|pre-push>   для хуков
+      (hook prompt: ORCHESTRA_MEMORY_HOOK_LIMIT=6, ORCHESTRA_MEMORY_HOOK_MIN_SCORE=2, ORCHESTRA_MEMORY_HOOK_HIT_CHARS=0, ORCHESTRA_MEMORY_HOOK_MIN_WORDS=0)
 
 Общие флаги: --repo <путь> (по умолчанию текущий репозиторий), --author <имя>`;
 
@@ -405,6 +460,9 @@ const HELP_EN = `orchestra-memory: project memory, wiki and logs
   search "<words>"            search facts, decisions and the log
   add-fact "<fact>" [--tags a,b] [--files f] [--source s] [--supersedes F-0001]
   add-decision --title "…" --decision "…" --why "…" [--alt "rejected option"]… [--files f] [--facts F-0001] [--supersedes D-0001]
+                              (record ids: D-FEA-0012 / F-FEA-0012, FEA is the branch code; the old D-0041 is accepted everywhere)
+  prefix [CODE] [--branch b] [--force]   the current branch's code for ids (1–4 Latin letters); without CODE: the table of codes
+  doctor                      find repeated ids in facts.json and logic.json
   log --type feature|fix|change|security|test|deploy|docs|cleanup|note --why "<why>" [--files f] "<description>" [--details '{json}']
                               (--why is required for feature, fix, change, security, deploy, cleanup, refactor, removed;
                                a manual data cleanup that leaves the cause in place is cleanup, not fix)
@@ -417,8 +475,8 @@ const HELP_EN = `orchestra-memory: project memory, wiki and logs
   changelog --draft           significant events since the last CHANGELOG update
   changelog --write file.md [--release "stage"]  put a digest (sections ### Added / ### Fixed …) into CHANGELOG.md
   push [git push arguments]   append memory as a separate commit if needed and run git push
-  hook <session-start|prompt|tool|stop|session-end|pre-commit|pre-push>   for hooks
-      (hook prompt: ORCHESTRA_MEMORY_HOOK_LIMIT=6, ORCHESTRA_MEMORY_HOOK_MIN_SCORE=2, ORCHESTRA_MEMORY_HOOK_MIN_WORDS=0)
+  hook <session-start|prompt|tool|stop|session-end|pre-commit|pre-merge-commit|pre-push>   for hooks
+      (hook prompt: ORCHESTRA_MEMORY_HOOK_LIMIT=6, ORCHESTRA_MEMORY_HOOK_MIN_SCORE=2, ORCHESTRA_MEMORY_HOOK_HIT_CHARS=0, ORCHESTRA_MEMORY_HOOK_MIN_WORDS=0)
 
 Common flags: --repo <path> (default: the current repository), --author <name>`;
 
@@ -453,6 +511,22 @@ async function main() {
       if (!str(a.title) || !str(a.decision) || !str(a.why)) throw new Error(pick(L, 'нужны --title, --decision и --why', '--title, --decision and --why are required'));
       const d = m.addDecision({ title: str(a.title)!, decision: str(a.decision)!, why: str(a.why)!, alternatives: many(a.alt), consequences: str(a.consequences), files: list(a.files), facts: list(a.facts), tags: list(a.tags), author: who, supersedes: str(a.supersedes) });
       return out(`${d.id}: ${d.title}`);
+    }
+    case 'prefix': {
+      const code = a._[1];
+      if (code) {
+        const b = str(a.branch) ?? m.branch();
+        return out(pick(L, `Ветка «${b}»: код ${m.setBranchCode(code, { branch: str(a.branch), force: !!a.force })}. Новые записи: D-${code.toUpperCase()}-0001…`, `Branch «${b}»: code ${m.setBranchCode(code, { branch: str(a.branch), force: !!a.force })}. New records: D-${code.toUpperCase()}-0001…`));
+      }
+      const codes = Object.entries(m.branchCodes());
+      const cur = m.branch();
+      return out(codes.length ? codes.map(([b, c]) => `${c}\t${b}${b === cur ? pick(L, '  ← текущая', '  ← current') : ''}`).join('\n') + (codes.some(([b]) => b === cur) ? '' : '\n' + pick(L, `у текущей ветки «${cur}» кода нет: orchestra-memory prefix <КОД>`, `the current branch «${cur}» has no code: orchestra-memory prefix <CODE>`)) : pick(L, 'Кодов веток нет. Задайте: orchestra-memory prefix <КОД>', 'No branch codes. Set one: orchestra-memory prefix <CODE>'));
+    }
+    case 'doctor': {
+      const d = m.duplicateIds();
+      const lines = [d.decisions.length && `logic.json: ${d.decisions.join(', ')}`, d.facts.length && `facts.json: ${d.facts.join(', ')}`].filter(Boolean);
+      process.exitCode = lines.length ? 1 : 0;
+      return out(lines.length ? pick(L, 'Повторяются номера:\n', 'Repeated ids:\n') + lines.join('\n') : pick(L, 'Повторов номеров нет.', 'No repeated ids.'));
     }
     case 'log': {
       let details: unknown;

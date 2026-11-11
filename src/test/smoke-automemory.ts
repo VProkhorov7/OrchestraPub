@@ -58,6 +58,7 @@ const mkrepo = (dir: string) => {
   git(r4, 'branch', 'old'); // made from the commit without memory
   setupRepo(r4, {});
   const pm = new ProjectMemory(r4);
+  pm.setBranchCode('M');
   pm.addFact({ text: 'The panel is served from renderer/', tags: [], files: [], author: 't' });
   git(r4, 'add', '-A');
   git(r4, 'commit', '-q', '-m', 'memory on main');

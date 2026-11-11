@@ -107,6 +107,14 @@ export function readAllow(root: string): Allow | null {
 export const GRANT_RE = /(разреша[юе]\s+(прод|выкладк|деплой|push|пуш|миграц)|добро\s+на\s+(прод|выкладк|деплой)|\ballow\s+(prod|production|deploy|deployment|push|migrations?)\b|\b(green\s*light|go[- ]ahead)\s+(for|on|to)\s+(prod|production|deploy|deployment)\b)/i;
 export const REVOKE_RE = /(запреща[юе]\s+(прод|выкладк|деплой)|отбой\s+(прод|выкладк|деплой)|\b(revoke|deny|cancel)\s+(prod|production|deploy|deployment)\b)/i;
 
+/**
+ * The owner's own words in a prompt: messages of other sessions, harness notifications and pasted text are cut out.
+ * Only these words may grant or revoke prod: a peer quoting «разрешаю прод» must not open the window.
+ */
+export function ownerWords(prompt: string): string {
+  return prompt.replace(/<(cross-session-message|task-notification|system-reminder|pasted_content)\b[^>]*>[\s\S]*?(<\/\1>|$)/gi, ' ');
+}
+
 export function grant(root: string, prompt: string, minutes: number): Allow {
   const now = new Date();
   const a: Allow = { grantedAt: now.toISOString(), until: new Date(now.getTime() + minutes * 60_000).toISOString(), phrase: prompt.slice(0, 200) };

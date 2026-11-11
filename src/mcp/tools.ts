@@ -185,7 +185,7 @@ export function registerMemoryTools(server: McpServer, repo: string, author = 'm
   }));
   tool(
     'memory_add_fact',
-    { description: 'Record an established fact (what is known / found / done). Use supersedes to replace an outdated fact.', inputSchema: { text: z.string(), tags: z.array(z.string()).optional(), files: z.array(z.string()).optional(), source: z.string().optional(), supersedes: z.string().optional() } },
+    { description: 'Record an established fact (what is known / found / done). Use supersedes to replace an outdated fact. The id carries the branch code (F-FEA-0012); a branch without a code is refused with how to set one.', inputSchema: { text: z.string(), tags: z.array(z.string()).optional(), files: z.array(z.string()).optional(), source: z.string().optional(), supersedes: z.string().optional() } },
     guard((a) => {
       const f = mem().addFact({ ...a, author });
       return `${f.id}: ${f.text}`;
@@ -194,7 +194,7 @@ export function registerMemoryTools(server: McpServer, repo: string, author = 'm
   tool(
     'memory_add_decision',
     {
-      description: 'Record a decision and WHY it was made (alternatives rejected, consequences). Use supersedes to revise an earlier decision.',
+      description: 'Record a decision and WHY it was made (alternatives rejected, consequences). Use supersedes to revise an earlier decision. The id carries the branch code (D-FEA-0012); a branch without a code is refused with how to set one.',
       inputSchema: { title: z.string(), decision: z.string(), why: z.string(), alternatives: z.array(z.string()).optional(), consequences: z.string().optional(), facts: z.array(z.string()).optional(), files: z.array(z.string()).optional(), tags: z.array(z.string()).optional(), supersedes: z.string().optional() },
     },
     guard((a) => {

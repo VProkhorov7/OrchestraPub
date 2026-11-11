@@ -128,7 +128,7 @@ export function setupRepo(root: string, o: { project?: string; rules?: boolean; 
     else {
       const dir = path.join(root, '.githooks');
       fs.mkdirSync(dir, { recursive: true });
-      for (const h of ['pre-commit', 'pre-push']) {
+      for (const h of ['pre-commit', 'pre-merge-commit', 'pre-push']) {
         fs.writeFileSync(path.join(dir, h), GIT_HOOK(h, lang));
         fs.chmodSync(path.join(dir, h), 0o755);
       }

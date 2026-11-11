@@ -11,8 +11,8 @@ Since version 0.6, every repository can have its own memory. It lives in the rep
 | `wiki/` | people | Project description: how it is built, how to run it, how to deploy it. Updated together with the code. |
 | `wiki/JOURNAL.md` | you | Micro-session journal: a short note, in Russian, on what was done, why, and what comes next. Newest entries first. |
 | `CHANGELOG.md` | people | Summary by stage in Keep a Changelog format: Added, Changed, Fixed, Security, Removed. |
-| `.memory/facts.json` | AI | Fact base: what has already been established (`F-0001` onwards), with tags and files. |
-| `.memory/logic.json` | AI | Logic base: decisions (`D-0001`…), the reason for each, what was rejected and the consequences. A new decision can supersede an old one. |
+| `.memory/facts.json` | AI | Fact base: what has already been established (`F-FEA-0001` onwards, FEA is the branch code; the old `F-0001` stay), with tags and files. |
+| `.memory/logic.json` | AI | Logic base: decisions (`D-FEA-0001`…), the reason for each, what was rejected and the consequences. A new decision can supersede an old one. |
 | `.memory/log/YYYY-MM.jsonl` | AI | Detailed log of all actions: date, type, author, files, description, details. |
 | `.memory/config.json` | settings | Wiki folder, micro-session length (35 minutes), strict mode. |
 
@@ -20,11 +20,11 @@ If the project already has a `wiki`, `Wiki`, `docs/wiki` or `docs` folder, memor
 
 ## How it works
 
-**Before a task.** The agent checks memory: what has already been found and done on the topic (facts, log), and then why it was done that way (decisions). In Claude Code this happens automatically: a hook on every message adds the relevant facts and decisions. How many and how strictly is set by environment variables (for example in the `env` of the project's `.claude/settings.json`): `ORCHESTRA_MEMORY_HOOK_LIMIT` — at most this many records (default 6), `ORCHESTRA_MEMORY_HOOK_MIN_SCORE` — the match threshold (2), `ORCHESTRA_MEMORY_HOOK_MIN_WORDS` — a message shorter than this many words («yes», «2») gets no records (0 — always). Orchestra adds memory to the task for the orchestrator, the planner and each worker.
+**Before a task.** The agent checks memory: what has already been found and done on the topic (facts, log), and then why it was done that way (decisions). In Claude Code this happens automatically: a hook on every message adds the relevant facts and decisions. How many and how strictly is set by environment variables (for example in the `env` of the project's `.claude/settings.json`): `ORCHESTRA_MEMORY_HOOK_LIMIT` — at most this many records (default 6), `ORCHESTRA_MEMORY_HOOK_MIN_SCORE` — the match threshold (2), `ORCHESTRA_MEMORY_HOOK_MIN_WORDS` — a message shorter than this many words («yes», «2») gets no records (0 — always), `ORCHESTRA_MEMORY_HOOK_HIT_CHARS` — each record line is cut to this many characters, with the hint «More: orchestra-memory context» (0 — whole). The records picked stay in the agent's context for the rest of the session, so cutting them saves context. Orchestra adds memory to the task for the orchestrator, the planner and each worker.
 
 **During work.** Every file change and every significant command goes into the JSON log. The agent records new facts and decisions itself (`add-fact`, `add-decision`).
 
-**Micro-session (30–40 minutes).** When time is nearly up, the agent gets a reminder and closes the session. One command writes two entries: a readable one in `wiki/JOURNAL.md` and a detailed one in `.memory/log/`. If the session is left open, the Claude Code end-of-session hook or the next commit closes it, and the entry is marked as automatic. A run of Orchestra also counts as a micro-session: the orchestrator's final report becomes a journal entry.
+**Micro-session (30–40 minutes).** When time is nearly up, the agent gets a reminder and closes the session. One command writes two entries: a readable one in `wiki/JOURNAL.md` and a detailed one in `.memory/log/`. If the session is left open, the Claude Code end-of-session hook or the next commit closes it, and the entry is marked as automatic. Closing writes the journal but does not reset the agent's context: after a close Claude Code reminds you once to type `/clear`, and after `/clear` it shows the previous session's handoff on screen (done, mandatory, next); the new agent gets the same handoff. A run of Orchestra also counts as a micro-session: the orchestrator's final report becomes a journal entry.
 
 **Commit and push.** The `pre-commit` git hook adds `.memory/`, `wiki/` and `CHANGELOG.md` to every commit and writes a "commit" event to the log. If unsaved memory is left before `git push`, the `pre-push` hook commits it separately (the push is not cancelled; that commit goes out with the next push). The `orchestra-memory push` command does all of this in one step. It works from the terminal, from Orca and from any GUI git client, because the hooks live in the repository (`.githooks/`).
 
@@ -43,7 +43,7 @@ These techniques come from colleagues' practice and from Skaro. They are built i
 | What | How it works | What the owner does |
 |---|---|---|
 | **Fact gate for workers** | The first edit of each file by an Orchestra worker is refused with questions: who calls this file, which public functions are affected, data fields and format, a verbatim quote of the task. Repeating the same edit goes through. The idea is GateGuard from ECC (MIT). Workers only; it does not run in your own session | Switch off: `ORCHESTRA_NO_GATEGUARD=1` |
-| **Prod guard** | A hook before every agent command stops `wrangler deploy`, commands with `--remote`, `wrangler secret put`, writes to production KV/R2, `npm run deploy`, `gh workflow run`, a forced push and, where a push to `main` publishes the site (for example, a site on Cloudflare Pages), a push to `main`. The agent explains what the command will do and asks for permission. Orchestra workers never have access to prod: they have no Cloudflare or GitHub keys, and the guard blocks them even if permission is given | Writes "allow prod", which opens a 20-minute window for this project. "Deny prod" closes it sooner. Settings: `.memory/config.json` → `prodGuard` |
+| **Prod guard** | A hook before every agent command stops `wrangler deploy`, commands with `--remote`, `wrangler secret put`, writes to production KV/R2, `npm run deploy`, `gh workflow run`, a forced push and, where a push to `main` publishes the site (for example, a site on Cloudflare Pages), a push to `main`. The agent explains what the command will do and asks for permission. Orchestra workers never have access to prod: they have no Cloudflare or GitHub keys, and the guard blocks them even if permission is given | Writes "allow prod", which opens a 20-minute window for this project. "Deny prod" closes it sooner. Only your own words count: the phrase inside another session's message, a notification or pasted text opens nothing. Settings: `.memory/config.json` → `prodGuard` |
 | **Brief with approval** | `/orchestra` saves the brief to `.memory/briefs/`. `orchestra-memory brief check` verifies that all seven sections are present and that no TODOs remain. Approval is tied to the file version: if you change the brief, the approval is reset. Ticking off completed subtasks (`- [x]`) does not count as a change | Writes "approve". The agent cannot approve its own brief: the guard protects the approvals file |
 | **Invariants** | `wiki/INVARIANTS.md` lists what must never become untrue. Every worker receives it, and the orchestrator and the `reviewer` role check the diff against it | Adds their own "never …" lines |
 | **Roles** | `.claude/agents/`: `scout` (reconnaissance, cheap model, read-only), `applier` (applies a ready plan), `reviewer` (diff review). Mechanical work does not use up the expensive model's limit | After installing the roles, restart `claude` |
@@ -87,6 +87,8 @@ orchestra-memory context "task"        what is known and decided on the topic
 orchestra-memory search "words"         search facts, decisions and the log
 orchestra-memory add-fact "text" --tags a,b --files f
 orchestra-memory add-decision --title "…" --decision "…" --why "…" --alt "…"
+orchestra-memory prefix FEA              the branch code for record ids (once per branch)
+orchestra-memory doctor                  repeated ids in facts.json and logic.json
 orchestra-memory log --type fix "description" --files f
 orchestra-memory session-end --summary "…" --done "…" --why "…" --next "…"
 orchestra-memory digest                  a fresh digest of the log
@@ -95,6 +97,8 @@ orchestra-memory changelog --write draft.md [--release "0.2"]
 orchestra-memory status
 orchestra-memory push                    memory + git push
 ```
+
+A record id carries the branch code so that parallel branches never hand out the same id: how to set the code is in [SETUP.en.md](SETUP.en.md#branch-code-for-memory-ids).
 
 All commands accept `--repo <path>`. The author is detected automatically (claude-code, codex, or the name from git). You can override it with `--author` or the `ORCHESTRA_AUTHOR` variable.
 

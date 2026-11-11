@@ -85,6 +85,36 @@ Whether Orchestra asks you to confirm the model is set under **Settings → Orch
 - take the recommendation silently;
 - always use the model from settings.
 
+### Branch code for memory ids
+
+A new memory record's id carries the branch code: `D-FEA-0012` is the twelfth decision of the branch with the code FEA, `F-FEA-0012` is its fact. Parallel branches therefore never hand out the same id, and nothing has to be renumbered after a merge. The count goes on from the highest number the code has ever had (deleted records in the log included), so an id is not given twice even after a record is deleted.
+
+Set the code once per branch, in the branch you work in:
+
+```sh
+orchestra-memory prefix FEA     # 1–4 Latin letters
+orchestra-memory prefix         # the table: which branch has which code
+```
+
+An example for a repository with several working branches:
+
+| Branch | Code | Ids |
+|---|---|---|
+| `main` | `M` | `D-M-0001` |
+| `features` | `FEA` | `D-FEA-0001` |
+| `android` | `A` | `D-A-0001` |
+| `design-and-alignment` | `DA` | `D-DA-0001` |
+| `ui-ux` | `UX` | `D-UX-0001` |
+| `versioning` | `V` | `D-V-0001` |
+| `fix/ai-cover` | `FAC` | `D-FAC-0001` |
+
+- The code lives in the repository's git config (`branch.<branch>.memoryPrefix`). That file is shared by all worktrees and is never merged, so a code another branch holds cannot be taken: the command refuses and names the branch. `git branch -m` moves the code with the branch; deleting the branch frees it. A branch's code can be changed only with `--force`.
+- If the code already appears in the records of this copy or of any branch git knows, remote ones included (the branch was deleted, or it is the same branch on another machine), the command asks for `--force`. Use it only when nobody writes with that code in parallel.
+- On a branch without a code, `add-fact`, `add-decision` and the MCP tools `memory_add_fact`, `memory_add_decision` refuse and show the command. No id without a code is handed out silently.
+- The old ids `D-0001`, `F-0001` stay as they are: search, `--supersedes` and `--facts` understand them.
+- `orchestra-memory doctor` lists ids used twice in `facts.json` and `logic.json`. The pre-commit hook (and the pre-merge-commit hook) warns when a commit brings a new repeat. The pre-merge-commit hook is installed by `orchestra-memory init`; in a repository set up earlier, run it again.
+- `logic.json` and `facts.json` are JSON arrays. Two branches that both appended records still conflict on the last line when merged, as before: keep the records of both sides. The ids already differ.
+
 ## 5. Service on a home server (Mac mini)
 
 Everything runs on the server (repositories, workers, logins, keys). The laptop only opens the panel.

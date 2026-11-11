@@ -159,6 +159,24 @@ export function words(s: string): string[] {
   return (s.toLowerCase().match(/[a-zа-яё0-9_]{3,}/g) ?? []).map((w) => (w.length > 5 ? w.slice(0, w.length - 2) : w));
 }
 
+/** A record id: the old D-0041 / F-0041 (kept forever) or D-FEA-0012 / F-FEA-0012 (kind, branch code, number). */
+export const ID_RE = /^([DF])-(?:([A-Z]{1,4})-)?(\d{4,})$/;
+export const CODE_RE = /^[A-Z]{1,4}$/;
+
+/** Ids met more than once in a list of records. */
+export function duplicates(list: Array<{ id: string }>): string[] {
+  const seen = new Set<string>();
+  const dup = new Set<string>();
+  for (const x of list) (seen.has(x.id) ? dup : seen).add(x.id);
+  return [...dup];
+}
+
+/** A code to offer in the hint: initials of the branch name's words (features → FEA, design-and-alignment → DAA). */
+function suggestCode(branch: string): string {
+  const w = branch.split('/').pop()!.split(/[^A-Za-z]+/).filter(Boolean);
+  return (w.length > 1 ? w.map((x) => x[0]).join('') : (w[0] ?? 'M').slice(0, 3)).slice(0, 4).toUpperCase();
+}
+
 /** End a sentence with exactly one period. */
 const dot = (s: string) => s.trim().replace(/[.。]+$/, '') + '.';
 
@@ -192,6 +210,95 @@ export class ProjectMemory {
 
   decisions(): Decision[] {
     return readJson<Decision[]>(path.join(this.dir, 'logic.json'), []);
+  }
+
+  // ---------- record ids: D-FEA-0012 / F-FEA-0012, the code is the branch's ----------
+
+  /** The current branch, or '' for a detached HEAD / not a git repository. */
+  branch(): string {
+    return git(this.root, ['symbolic-ref', '--short', '-q', 'HEAD']);
+  }
+
+  /**
+   * Branch → code, from `git config branch.<name>.memoryPrefix`. The repository's git config is one file
+   * shared by all its worktrees and is never merged, so `setBranchCode` sees every branch's code at once.
+   */
+  branchCodes(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const line of git(this.root, ['config', '--get-regexp', '^branch\\..*\\.memoryprefix$']).split('\n')) {
+      const m = line.match(/^branch\.(.+)\.memoryprefix\s+(\S+)$/);
+      if (m) out[m[1]] = m[2];
+    }
+    return out;
+  }
+
+  /** The code of the current branch; throws with a hint when there is none. */
+  branchCode(): string {
+    const lang = this.config().language;
+    const b = this.branch();
+    if (!b) throw new Error(pick(lang, 'HEAD не на ветке: номер записи памяти содержит код ветки. Переключитесь на ветку (git switch <ветка>)', 'HEAD is not on a branch: a memory record id carries the branch code. Switch to a branch (git switch <branch>)'));
+    const codes = this.branchCodes();
+    if (codes[b]) return codes[b];
+    const taken = Object.entries(codes).map(([br, c]) => `${c} (${br})`).join(', ');
+    throw new Error(
+      pick(
+        lang,
+        `у ветки «${b}» нет кода для номеров памяти. Задайте свой код ветки (1–4 латинские буквы): orchestra-memory prefix <КОД>, например orchestra-memory prefix ${suggestCode(b)}.${taken ? ` Уже заняты: ${taken}.` : ''}`,
+        `the branch «${b}» has no code for memory record ids. Give it its own code (1–4 Latin letters): orchestra-memory prefix <CODE>, for example orchestra-memory prefix ${suggestCode(b)}.${taken ? ` Already taken: ${taken}.` : ''}`,
+      ),
+    );
+  }
+
+  /** Give a branch (the current one by default) its code. Refuses a code another branch has. */
+  setBranchCode(code: string, o: { branch?: string; force?: boolean } = {}): string {
+    const lang = this.config().language;
+    const c = code.trim().toUpperCase();
+    if (!CODE_RE.test(c)) throw new Error(pick(lang, `код ветки — 1–4 латинские буквы, а не «${code}»`, `a branch code is 1–4 Latin letters, not «${code}»`));
+    const b = o.branch ?? this.branch();
+    if (!b) throw new Error(pick(lang, 'HEAD не на ветке: укажите ветку (--branch <ветка>)', 'HEAD is not on a branch: name it (--branch <branch>)'));
+    const codes = this.branchCodes();
+    if (codes[b] === c) return c;
+    if (codes[b] && !o.force) throw new Error(pick(lang, `у ветки «${b}» уже код ${codes[b]}: сменить его можно с --force (записи с ${codes[b]} останутся, код освободится)`, `the branch «${b}» already has the code ${codes[b]}: change it with --force (the records with ${codes[b]} stay, the code becomes free)`));
+    const other = Object.keys(codes).find((x) => x !== b && codes[x] === c);
+    if (other) throw new Error(pick(lang, `код ${c} уже у ветки «${other}»: у каждой ветки свой код`, `the code ${c} already belongs to the branch «${other}»: each branch has its own code`));
+    // A code free in this repository's config may still have been used elsewhere (another clone, a deleted branch):
+    // look in the records of this tree and of every branch git knows, remote ones included.
+    const refs = git(this.root, ['for-each-ref', '--format=%(refname)', 'refs/heads', 'refs/remotes']).split('\n').filter(Boolean);
+    const pattern = `"[DF]-${c}-[0-9]{4,}"`;
+    const files = ['.memory/facts.json', '.memory/logic.json'];
+    const found = [git(this.root, ['grep', '-h', '-o', '-E', '--no-index', pattern, '--', ...files.filter((f) => fs.existsSync(this.p(f)))]), refs.length ? git(this.root, ['grep', '-h', '-o', '-E', pattern, ...refs, '--', ...files]) : ''];
+    const used = [...new Set(found.join('\n').split('\n').map((s) => s.replace(/^.*?"|"$/g, '')).filter(Boolean))];
+    if (used.length && !o.force)
+      throw new Error(
+        pick(
+          lang,
+          `записи с кодом ${c} уже есть (${used.slice(0, 3).join(', ')}): этот код уже писала другая ветка. Возьмите другой код. Если это та же ветка (другая машина, ветка пересоздана) и параллельно с кодом ${c} никто не пишет — добавьте --force`,
+          `records with the code ${c} already exist (${used.slice(0, 3).join(', ')}): another branch has written with it. Take another code. If it is the same branch (another machine, the branch was recreated) and nobody writes with ${c} in parallel, add --force`,
+        ),
+      );
+    execFileSync('git', ['config', `branch.${b}.memoryPrefix`, c], { cwd: this.root, stdio: 'ignore' });
+    return c;
+  }
+
+  /**
+   * Next id of a kind for the current branch: the highest number ever given with this code + 1.
+   * «Ever» includes ids that are only in the log (a deleted record), so a number is never given twice.
+   */
+  private nextId(kind: 'D' | 'F'): string {
+    const code = this.branchCode();
+    let max = 0;
+    const see = (id: unknown) => {
+      const m = typeof id === 'string' ? ID_RE.exec(id) : null;
+      if (m && m[1] === kind && m[2] === code) max = Math.max(max, Number(m[3]));
+    };
+    for (const x of kind === 'D' ? this.decisions() : this.facts()) see(x.id);
+    for (const e of this.readLog({ types: [kind === 'D' ? 'decision' : 'fact'] })) see((e.details as any)?.id);
+    return `${kind}-${code}-${String(max + 1).padStart(4, '0')}`;
+  }
+
+  /** Ids used by more than one record, per file. */
+  duplicateIds(): { facts: string[]; decisions: string[] } {
+    return { facts: duplicates(this.facts()), decisions: duplicates(this.decisions()) };
   }
 
   /** Create what is missing; never overwrites existing content. */
@@ -252,7 +359,7 @@ export class ProjectMemory {
     const norm = f.text.trim().toLowerCase();
     const dup = facts.find((x) => x.status === 'active' && x.text.trim().toLowerCase() === norm);
     if (dup) return dup;
-    const id = `F-${String(facts.length + 1).padStart(4, '0')}`;
+    const id = this.nextId('F');
     const fact: Fact = { id, text: f.text.trim(), tags: f.tags ?? [], files: f.files ?? [], source: f.source, author: f.author, created: now(), updated: now(), status: 'active' };
     if (f.supersedes) {
       const old = facts.find((x) => x.id === f.supersedes);
@@ -266,7 +373,7 @@ export class ProjectMemory {
 
   addDecision(d: { title: string; decision: string; why: string; alternatives?: string[]; consequences?: string; facts?: string[]; files?: string[]; tags?: string[]; author: string; supersedes?: string }): Decision {
     const list = this.decisions();
-    const id = `D-${String(list.length + 1).padStart(4, '0')}`;
+    const id = this.nextId('D');
     const dec: Decision = {
       id,
       title: d.title.trim(),
@@ -330,16 +437,18 @@ export class ProjectMemory {
   search(query: string, limit = 8): Array<{ kind: 'fact' | 'decision' | 'event'; score: number; item: Fact | Decision | LogEvent }> {
     const q = new Set(words(query));
     if (!q.size) return [];
-    const score = (text: string, tags: string[] = [], files: string[] = []) => {
-      let s = 0;
+    // A record named by its id (D-0041, D-FEA-0012) is found first.
+    const ids = new Set((query.toUpperCase().match(/\b[DF]-(?:[A-Z]{1,4}-)?\d{4,}\b/g) ?? []));
+    const score = (text: string, tags: string[] = [], files: string[] = [], id = '') => {
+      let s = ids.has(id) ? 10 : 0;
       for (const w of words(text)) if (q.has(w)) s += 1;
       for (const t of tags) if (q.has(words(t)[0] ?? '')) s += 2;
       for (const f of files) if (words(f).some((w) => q.has(w))) s += 1.5;
       return s;
     };
     const res: Array<{ kind: 'fact' | 'decision' | 'event'; score: number; item: any }> = [];
-    for (const f of this.facts()) if (f.status === 'active') res.push({ kind: 'fact', score: score(f.text, f.tags, f.files), item: f });
-    for (const d of this.decisions()) if (d.status === 'active') res.push({ kind: 'decision', score: score(`${d.title} ${d.decision} ${d.why}`, d.tags, d.files) * 1.2, item: d });
+    for (const f of this.facts()) if (f.status === 'active' || ids.has(f.id)) res.push({ kind: 'fact', score: score(f.text, f.tags, f.files, f.id), item: f });
+    for (const d of this.decisions()) if (d.status === 'active' || ids.has(d.id)) res.push({ kind: 'decision', score: score(`${d.title} ${d.decision} ${d.why}`, d.tags, d.files, d.id) * 1.2, item: d });
     for (const e of this.readLog({ limit: 400 })) if (!['edit', 'command', 'session_start'].includes(e.type)) res.push({ kind: 'event', score: score(e.description, e.tags, e.files) * 0.6, item: e });
     return res.filter((r) => r.score >= 1).sort((a, b) => b.score - a.score).slice(0, limit);
   }
@@ -506,7 +615,7 @@ export class ProjectMemory {
       files,
       session: s?.id,
       why: e.why,
-      details: { minutes, done: e.done ?? [], why: e.why, gates, next: nextOne ? [nextOne] : [], later, commits, goal: s?.goal, auto: !!e.auto, warnings, extra: e.details },
+      details: { minutes, done: e.done ?? [], why: e.why, gates, next: nextOne ? [nextOne] : [], later, commits, goal: s?.goal, auto: !!e.auto, agent: s?.agentSession, warnings, extra: e.details },
     });
     this.appendJournal({ author: e.author, minutes, summary: e.summary, done: e.done, why: e.why, gates, next: nextOne ? [nextOne] : [], files: codeFiles, commits, auto: e.auto });
     this.saveSession(undefined);

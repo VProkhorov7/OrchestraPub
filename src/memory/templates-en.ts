@@ -23,7 +23,7 @@ orchestra-memory session-end --summary "<2–3 plain sentences for the owner>" \
   --gate "<mandatory before the next task>" (at most three) --next "<exactly one next task>" \\
   --details '<JSON with details for AI: files, commands, test results, open questions>'
 \`\`\`
-This produces two records: a short human one in \`wiki/JOURNAL.md\` and a detailed JSON one in \`.memory/log/\`. At most three mandatory items and exactly one next task: what matters drowns in long lists; the rest goes as a link in \`wiki/status/current.md\`.
+This produces two records: a short human one in \`wiki/JOURNAL.md\` and a detailed JSON one in \`.memory/log/\`. Closing does not reset the agent context: afterwards ask the owner to type \`/clear\`; the summary reaches the new session by itself. At most three mandatory items and exactly one next task: what matters drowns in long lists; the rest goes as a link in \`wiki/status/current.md\`.
 
 **Journal with the «why».** \`orchestra-memory log\` for feature, fix, change, security, deploy, refactor, removed requires \`--why\`. A manual data cleanup that leaves the cause in place is type \`cleanup\`, not \`fix\`: otherwise the next recurrence reads as «we already fixed this».
 
